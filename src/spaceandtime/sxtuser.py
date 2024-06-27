@@ -24,6 +24,7 @@ class SXTUser():
 
     def __init__(self, dotenv_file:Path = None, user_id:str = None, 
                  user_private_key:str = None, api_url:str = None,
+                 new_keypair:bool = False,
                  encoding:SXTKeyEncodings = None, authenticate:bool = False, 
                  application_name:str = None,
                  logger:logging.Logger = None, 
@@ -46,7 +47,10 @@ class SXTUser():
         self.logger.debug(f'SXT User instantiating...')
 
         encoding = encoding if encoding else SXTKeyEncodings.BASE64 
-        self.key_manager = SXTKeyManager(private_key = user_private_key, encoding = encoding, logger=self.logger)
+        if new_keypair:
+            self.key_manager = SXTKeyManager(new_keypair = True, logger=self.logger)
+        else:
+            self.key_manager = SXTKeyManager(private_key = user_private_key, encoding = encoding, logger=self.logger)
         self.base_api = SXTBaseAPI(logger = self.logger)
         self.__bs = []
         self.__usrtyp__ = {'type':'', 'timeout':datetime.datetime.now()}
