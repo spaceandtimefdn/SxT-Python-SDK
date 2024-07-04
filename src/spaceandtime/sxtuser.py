@@ -36,7 +36,10 @@ class SXTUser():
             if not application_name: self.application_name = SpaceAndTime_parent.application_name
             if not logger: logger = SpaceAndTime_parent.logger
             self.start_time = SpaceAndTime_parent.start_time if SpaceAndTime_parent.start_time else datetime.datetime.now()
+        else:
+            self.start_time = datetime.datetime.now()
 
+        # configure logger, if not supplied
         if logger: 
             self.logger = logger 
         else: 
@@ -46,30 +49,30 @@ class SXTUser():
                 self.logger.addHandler( logging.StreamHandler() )
         self.logger.debug(f'SXT User instantiating...')
 
-        encoding = encoding if encoding else SXTKeyEncodings.BASE64 
-        if new_keypair:
-            self.key_manager = SXTKeyManager(new_keypair = True, logger=self.logger)
-        else:
-            self.key_manager = SXTKeyManager(private_key = user_private_key, encoding = encoding, logger=self.logger)
-        self.base_api = SXTBaseAPI(logger = self.logger)
-        self.__bs = []
+        # assign defaults, if nothing else is supplied
+        self.__bs = [] 
         self.__usrtyp__ = {'type':'', 'timeout':datetime.datetime.now()}
+        self.key_manager = SXTKeyManager(logger = self.logger)
+        self.base_api = SXTBaseAPI(logger = self.logger)
 
-        # from dotenv file, if exists
+        # load values from from dotenv file, to replace defaults (if supplied)
         dotenv_file = Path('./.env') if not dotenv_file and Path('./.env').resolve().exists() else dotenv_file
         if dotenv_file: self.load(dotenv_file)
 
-        # overwrite userid, api_url, and private key (and public key, by extension), if supplied
-        if user_private_key: self.private_key = user_private_key
+        # load individual values from params, to replace env values (if supplied)
+        encoding = encoding if encoding else SXTKeyEncodings.BASE64 
+        if new_keypair: self.key_manager.new_keypair()
+        if user_private_key: self.key_manager.private_key = user_private_key
         if user_id: self.user_id = user_id
-        if api_url: self.api_url = api_url
+        self.api_url = api_url if api_url else 'https://api.spaceandtime.app'
 
         # secret option: make a test user_id if requested:
         if 'testuser' in kwargs: 
-            self.user_id = 'testuser_' + kwargs['testuser'] + '_' + f"{random.randint(0,999999999999):012}"
+            self.user_id = f"testuser_{kwargs['testuser']}_{random.randint(0,1e18):018}"
 
-        self.logger.info(f'SXT User instantiated: {self.user_id}')
+        self.logger.info(f'SXT User instantiated: {self}')
         if authenticate: self.authenticate()
+
 
 
     @property
@@ -164,9 +167,9 @@ class SXTUser():
             None
         """
         load_dotenv(dotenv_file, override=True)
-        self.api_url = os.getenv('API_URL')
-        self.user_id = os.getenv('USERID')
-        self.private_key = os.getenv('USER_PRIVATE_KEY')
+        self.api_url = str(os.getenv('API_URL'))
+        self.user_id = str(os.getenv('USERID'))
+        self.private_key = str(os.getenv('USER_PRIVATE_KEY'))
 
         # TODO: Right now, only ED25519 authentication is supported.  Add Eth wallet support, or other future schemes
         # self.key_scheme = os.getenv('USER_KEY_SCHEME')
@@ -232,6 +235,7 @@ class SXTUser():
 
 
     def replace_all(self, mainstr:str, replace_map:dict = None) -> str:
+        self.start_time = self.start_time if self.start_time else datetime.now() 
         if not replace_map: replace_map = {'user_id':self.user_id, 'public_key':self.public_key, 'start_time':self.start_time.strftime('%Y-%m-%d %H:%M:%S')}
         if 'date' not in replace_map.keys(): replace_map['date'] = int(self.start_time.strftime('%Y%m%d'))
         if 'time' not in replace_map.keys(): replace_map['time'] = int(self.start_time.strftime('%H%M%S'))
@@ -259,7 +263,7 @@ class SXTUser():
                 success, response = self.base_api.get_access_token(user_id = self.user_id, 
                                                                    challange_token = challenge_token, 
                                                                    signed_challange_token = signed_challenge_token,
-                                                                   public_key = self.public_key)
+                                                                   public_key = self.key_manager.public_key_to(self.ENCODINGS.BASE64))
             if success:
                 tokens = response
             else: 
@@ -300,6 +304,7 @@ class SXTUser():
         This is a duplicate of the "execute_query" method, provided for backwards compatibility.
         Use the more consistent "execute_query" to avoid future deprecation issues. 
         """
+        self.logger.warning('execute_sql() is deprecated, use execute_query() instead.')
         return self.execute_query(sql_text=sql_text, biscuits=biscuits, app_name=app_name)
 
     def execute_query(self, sql_text:str, biscuits:list = None, app_name:str = None):
