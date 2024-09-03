@@ -122,10 +122,42 @@ class SXTUser():
     def recommended_filename(self) -> Path:
         filename = f'./users/{self.user_id}.env' 
         return Path(filename)
+ 
+
+    @property
+    def exists(self) -> bool:
+        """Returns whether the user_id exists on the network."""
+        success, response = self.base_api.auth_idexists(self.user_id)
+        return True if str(response).lower() == 'true' else False
+
+
+    def __validtoken__(self, name:str) -> dict:      
+        if self.access_expired: return 'disconnected - authenticate to retrieve'
+        success, response = self.base_api.auth_validtoken()
+        if success and name in response: return response[name]
+        else: return 'error - could not retrieve'  
+
+    @property
+    def subscription_id(self) -> str:
+        return self.__validtoken__('subscriptionId')
+    
+    @property
+    def is_trial(self) -> str:
+        return self.__validtoken__('trial')
+    
+    @property
+    def is_restricted(self) -> str:
+        return self.__validtoken__('restricted')
+
+    @property
+    def is_quota_exceeded(self) -> str:
+        return self.__validtoken__('quotaExceeded')
+ 
+
 
 
     def __str__(self):
-        flds = {fld: getattr(self, fld) for fld in ['api_url','user_id','private_key','public_key','encoding']}
+        flds = {fld: getattr(self, fld) for fld in ['api_url','user_id','exists','private_key','public_key','encoding', 'subscription_id', 'is_trial', 'is_restricted', 'is_quota_exceeded']}
         flds['private_key'] = flds['private_key'][:6]+'...'
         return '\n'.join( [ f'\t{n} = {v}' for n,v in flds.items() ] )
 
@@ -235,7 +267,15 @@ class SXTUser():
             mainstr = str(mainstr).replace('{'+str(findname)+'}', str(replaceval))                    
         return mainstr
 
-        
+
+
+    def __settokens__(self, access_token:str, refresh_token:str, access_token_expire_epoch:int, refresh_token_expire_epoch:int):
+        self.access_token = access_token
+        self.refresh_token = refresh_token
+        self.access_token_expire_epoch = access_token_expire_epoch
+        self.refresh_token_expire_epoch = refresh_token_expire_epoch
+        self.base_api.access_token = self.access_token
+
 
     def authenticate(self) -> str:
         return self.register_new_user()
@@ -243,6 +283,13 @@ class SXTUser():
     def register_new_user(self, join_code:str = None) -> str:
         """--------------------
         Authenticate to the Space and Time network, and store access_token and refresh_token.
+
+        Args: 
+            join_code (str): Optional to create a new user within an existing subscription.
+        
+        Returns:
+            bool: Success flag (True/False) indicating the call worked as expected.
+            object: Access_Token if successful, otherwise an error object.
         """
         if not (self.user_id and self.private_key):
             raise SxTArgumentError('Must have valid UserID and Private Key to authenticate.', logger=self.logger)
@@ -264,11 +311,11 @@ class SXTUser():
                 raise SxTAuthenticationError('Authentication produced incorrect / incomplete output', logger=self.logger)
         except SxTAuthenticationError as ex:
             return False, [ex]
-        self.access_token = tokens['accessToken']
-        self.refresh_token = tokens['refreshToken']
-        self.access_token_expire_epoch = tokens['accessTokenExpires']
-        self.refresh_token_expire_epoch = tokens['refreshTokenExpires']
-        self.base_api.access_token = tokens['accessToken']
+
+        self.__settokens__(tokens['accessToken'], tokens['refreshToken'], tokens['accessTokenExpires'], tokens['refreshTokenExpires'])
+        if join_code and ('disconnected' in str(self.subscription_id).strip() or str(self.subscription_id).strip() == ''): 
+            success, response = self.join_subscription(join_code) 
+
         return True, self.access_token 
 
 
@@ -301,21 +348,86 @@ class SXTUser():
     def execute_query(self, sql_text:str, biscuits:list = None, app_name:str = None):
         return self.base_api.sql_exec(sql_text=sql_text, biscuits=biscuits, app_name=app_name)
 
+
     def generate_joincode(self, role:str = 'member'):
+        """
+        Generate an invite /joincode to join the inviting user's subscription.
+
+        Args: 
+            role (str): Role level to assign the new user. Can be member, admin, or owner.
+        
+        Returns:
+            str: Joincode
+        """
         success, results = self.base_api.subscription_invite_user(role)
         if not success:
             self.logger.error(str(results)) 
             return str(results)
-        self.logger.info('Generated {} joincode')
+        self.logger.info('Generated joincode')
         return results['text']
     
+
     def join_subscription(self, joincode:str):
-        success, results = self.base_api.subscription_join(joincode=joincode)
+        """
+        Join an existing subscription to the Space and Time network, based on supplied JoinCode (expires after 24 hours).
+        Note, joining a subscription will refresh both the access_token and refresh_token.
+        """
+        success, tokens = self.base_api.subscription_join(joincode=joincode)
+        if success: 
+            self.__settokens__(tokens['accessToken'], tokens['refreshToken'], tokens['accessTokenExpires'], tokens['refreshTokenExpires'])
+            return True, 'Consumed join_code and joined subscription!'
         if not success:
-            self.logger.error(str(results)) 
-            return False, str(results)
-        return True, 'Consumed join_code and joined subscription!'
+            self.logger.error(str(tokens)) 
+            return False, str(tokens)
+
+
+    def leave_subscription(self) -> tuple[bool, dict]:   
+        """
+        Currently authenticated user leaves subscription.  Fails if the user is not authenticated.
+        """
+        if self.access_expired: return False, {"error":"disconnected - authenticate to leave subscription"}
+        return self.base_api.subscription_leave()
         
+    def remove_from_subscription(self, user_id_to_remove:str) -> tuple[bool, dict]:
+        """
+        Removes another user from the current user's subscription.  Current user must have more authority than the targeted user to remove.
+
+        Args: 
+            User_ID_to_Remove (str): ID of the user to remove from the current user's subscription.
+
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            object: Response information from the Space and Time network, as list or dict(json).
+        """
+        success, response = self.base_api.subscription_remove(user_id_to_remove)
+        if success: 
+            msg =f"Removed {user_id_to_remove} from subscription."
+            self.logger.info(msg)
+            return True, {"text": msg}
+        else:
+            self.logger.error(str(response)) 
+            return False, response
+        
+
+    def get_subscription_users(self) -> tuple[bool, dict]:
+        """
+        Returns a list of all users in the current subscription.
+        
+        Args:
+            None
+
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            object: Dictionary of User_IDs and User Permission level in the subscription, or error as json.
+        """
+        success, response = self.base_api.subscription_get_users()
+        if success: 
+            return True, response
+        else:
+            self.logger.error(response) 
+            return False, response
+
+
 
 if __name__ == '__main__':
 
