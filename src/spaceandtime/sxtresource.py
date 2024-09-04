@@ -205,10 +205,12 @@ class SXTResource():
         """Returns True of the resource appears on the Space and Time network, or False if it is missing.  
         Returns None if a connection cannot be established or encountered an error."""
         if self.user.access_expired: self.user.authenticate()
+        # __existfunc__ is defined by the interhiriting child class (table, view, etc.) which has the same signature, but called here
         success, resources = self.__existfunc__(schema=self.schema)
         if success:
             apiname = 'table' if self.resource_type.name.lower() == 'table' else 'view'
-            does_exist = f"{self.schema}.{self.name}".upper() in [ f"{r['schema']}.{r[apiname]}" for r in resources]
+
+            does_exist = str(self.name).upper() in [ r[apiname] for r in resources]
             self.logger.debug(f'testing whether {self.resource_name} exists:  {str(does_exist)}')
             return does_exist 
         else:

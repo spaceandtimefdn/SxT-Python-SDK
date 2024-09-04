@@ -64,7 +64,7 @@ def test_inserts_deletes_updates():
     sxt = SpaceAndTime()
     sxt.authenticate()
 
-    tbl = SXTTable(name='SXTTemp.Test_DML', from_file='./.env', SpaceAndTime_parent=sxt)
+    tbl = SXTTable(name='SXTTemp.Test_DML1', from_file='./.env', SpaceAndTime_parent=sxt)
     tbl.create_ddl = """
     CREATE TABLE {table_name} 
     ( MyID         int
@@ -77,14 +77,14 @@ def test_inserts_deletes_updates():
     if not tbl.exists: 
         tbl.create()
     else:
-        tbl.delete(where='')
+        tbl.delete(where='1=1')
 
-    data = [ {'MyID':1, 'MyName':'Abby',  'MyNumber':6}
+    data_in = [ {'MyID':1, 'MyName':'Abby',  'MyNumber':6}
             ,{'MyID':2, 'MyName':'Bob',   'MyNumber':6}
             ,{'MyID':3, 'MyName':'Chuck', 'MyNumber':6}
             ,{'MyID':4, 'MyName':'Daria', 'MyNumber':6}
             ]
-    tbl.insert.with_list_of_dicts(data)
+    tbl.insert.with_list_of_dicts(data_in)
     success, data = tbl.select()
     assert success
     assert [r['MYNUMBER'] for r in data] == [6, 6, 6, 6]

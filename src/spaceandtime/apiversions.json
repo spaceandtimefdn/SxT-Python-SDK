@@ -29,7 +29,10 @@
     "discover/blockchains/{chainId}/schemas": "v2",                         
     "discover/blockchains/{chainId}/meta":    "v2",
     "subscription":                           "v1",
-    "subscription/users":                     "v1",
     "subscription/invite":                    "v1",
-    "subscription/invite/{joinCode}":         "v1"
+    "subscription/invite/{joinCode}":         "v1",
+    "subscription/leave":                    "v1",
+    "subscription/remove/{userId}":           "v1",   
+    "subscription/setrole/{userId}":          "v1",
+    "subscription/users":                     "v1"
 }

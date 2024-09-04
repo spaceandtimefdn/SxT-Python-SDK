@@ -262,7 +262,7 @@ class SXTBaseAPI():
         """
         dataparms = {"userId": user_id}
         if prefix: dataparms["prefix"] = prefix
-        if joincode: dataparms[joincode] = joincode
+        if joincode: dataparms["joincode"] = joincode
         success, rtn = self.call_api(endpoint = 'auth/code', auth_header = False, data_parms = dataparms)
         return success, rtn if success else [rtn]
 
@@ -349,7 +349,7 @@ class SXTBaseAPI():
             bool: Success flag (True/False) indicating the api call worked as expected.
             object: Response information from the Space and Time network, as list or dict(json). 
         """
-        success, rtn = self.call_api(f'auth/idexists/{user_id}', False, SXTApiCallTypes.GET)
+        success, rtn = self.call_api('auth/idexists/{id}', False, SXTApiCallTypes.GET, path_parms={'id':user_id})
         return success, rtn if success else [rtn]
     
     
@@ -692,9 +692,64 @@ class SXTBaseAPI():
         endpoint = 'subscription/invite/{joinCode}'
         version = 'v2' if endpoint not in list(self.versions.keys()) else self.versions[endpoint] 
         success, rtn = self.call_api(endpoint=endpoint, auth_header=True, request_type=SXTApiCallTypes.POST,
-                                     path_parms= {'{joinCode}': joincode} )
+                                     path_parms= {'joinCode': joincode} )
         return success, (rtn if success else [rtn]) 
 
+
+    def subscription_leave(self):
+        """--------------------
+        Allows the authenticated user to leave their subscription.
+
+        Calls and returns data from API: subscription/leave.  
+
+        Args: 
+            None
+        
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            object: Response information from the Space and Time network, as list or dict(json). 
+        """
+        endpoint = 'subscription/leave'
+        version = 'v2' if endpoint not in list(self.versions.keys()) else self.versions[endpoint] 
+        success, rtn = self.call_api(endpoint=endpoint, auth_header=True, request_type=SXTApiCallTypes.POST )
+        return success, (rtn if success else [rtn])
+
+
+    def subscription_get_users(self) -> tuple[bool, dict]:
+        """
+        Returns a list of all users in the current subscription.
+
+        Args:
+            None
+
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            object: Dictionary of User_IDs and User Permission level in the subscription, or error as json.
+        """
+        endpoint = 'subscription/users'
+        version = 'v2' if endpoint not in list(self.versions.keys()) else self.versions[endpoint] 
+        success, rtn = self.call_api(endpoint=endpoint, auth_header=True, request_type=SXTApiCallTypes.GET )
+        if success: rtn = rtn['roleMap']
+        return success, rtn
+        
+
+    def subscription_remove(self, User_ID_to_Remove:str) -> tuple[bool, dict]:
+        """
+        Removes another user from the current user's subscription.  Current user must have more authority than the targeted user to remove.
+
+        Args: 
+            User_ID_to_Remove (str): ID of the user to remove from the current user's subscription.
+
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            object: Response information from the Space and Time network, as list or dict(json).
+        """
+        endpoint = 'subscription/remove/{userId}'
+        version = 'v2' if endpoint not in list(self.versions.keys()) else self.versions[endpoint] 
+        success, rtn = self.call_api(endpoint=endpoint, auth_header=True, request_type=SXTApiCallTypes.POST,
+                                     path_parms= {'userId': User_ID_to_Remove} )
+        return success, rtn
+        
 
 
 if __name__ == '__main__':
