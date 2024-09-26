@@ -84,18 +84,18 @@ def test_call_api():
     sxtb = SXTBaseAPI(access_token)
     success, user_exists = sxtb.call_api('auth/idexists/{id}', auth_header=False, 
                                       request_type=sxtb.APICALLTYPE.GET, 
-                                      path_parms={'id':userid})
+                                      path_params={'id':userid})
     assert success
     assert user_exists 
 
     success, user_exists = sxtb.call_api('auth/idexists/{id}', auth_header=False, 
                                       request_type=sxtb.APICALLTYPE.GET, 
-                                      path_parms={'id':'this_user_should_not_exist_please_dont_create'})
+                                      path_params={'id':'this_user_should_not_exist_please_dont_create'})
     assert success
     assert not user_exists 
 
     success, data = sxtb.call_api('sql', auth_header=True, request_type=sxtb.APICALLTYPE.POST, 
-                                  data_parms={'sqlText':'select * from sxtlabs.singularity'} )
+                                  data_params={'sqlText':'select * from sxtlabs.singularity'} )
     assert success
     assert data[0]['NAME'] == 'Singularity' # hopefully this doesn't change...
 
@@ -107,7 +107,7 @@ def test_call_api():
 
     # good API, not validated
     success, data = sxtb.call_api('sql', auth_header=False, request_type=sxtb.APICALLTYPE.POST, 
-                                  data_parms={'sqlText':'select * from sxtlabs.singularity'} )
+                                  data_params={'sqlText':'select * from sxtlabs.singularity'} )
     assert not success
     assert data['status_code'] == 401
     assert 'Unauthorized' in data['error'] 
