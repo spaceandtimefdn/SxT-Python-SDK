@@ -193,16 +193,20 @@ class SXTUser():
         """
         load_dotenv(dotenv_file, override=True)
         self.api_url = os.getenv('API_URL')
-        
+
         # add user_id from environment (including several options)
-        for userid_var in ['SXT_USER_ID', 'USER_ID', 'SXT_USERID', 'USERID']:
-            self.user_id = os.getenv(userid_var)
-            if len(self.user_id)>0: break
-            
+        for userid_var in ['SXT_USER_ID', 'SXT_USERID', 'USER_ID', 'USERID']:
+            temp = os.getenv(userid_var)
+            if temp: 
+                self.user_id = temp
+                break
+        
         # add user private key from environment (including several options)
-        for user_privatekey_var in ['SXT_USER_PRIVATE_KEY', 'USER_PRIVATE_KEY', 'SXT_USER_PRIVATEKEY', 'USER_PRIVATEKEY']:
-            self.private_key = os.getenv(user_privatekey_var)
-            if len(self.private_key)>0: break
+        for user_privatekey_var in ['SXT_USER_PRIVATE_KEY', 'SXT_USER_PRIVATEKEY', 'USER_PRIVATE_KEY', 'USER_PRIVATEKEY']:
+            temp = os.getenv(user_privatekey_var)
+            if temp: 
+                self.private_key = temp
+                break
 
         # TODO: Right now, only ED25519 authentication is supported.  Add Eth wallet support, or other future schemes
         # self.key_scheme = os.getenv('USER_KEY_SCHEME')
