@@ -1,4 +1,4 @@
-import logging, json, random, time
+import logging, json, random, time, os
 from pysteve import pySteve
 from pathlib import Path
 from datetime import datetime
@@ -461,7 +461,7 @@ class SXTResource():
         return success, results
         
 
-    def select(self, sql_text:str = '', columns:list = ['*'], user:SXTUser = None, biscuits:list = None, row_limit:int = 50) -> json:
+    def select(self, sql_text:str = '', columns:list = ['*'], user:SXTUser = None, biscuits:list = None, row_limit:int = 50) -> tuple[bool, dict]:
         """--------------------
         Issues a SELECT statement to the Space and Time network, and report back success and rows (or failure details).
 
@@ -676,7 +676,7 @@ class SXTResource():
         """--------------------
         Accepts a string and returns a DB safe insert string, wrapped in quotes with escape characters.
         """
-        if not original_column_value: original_column_value = ''
+        if original_column_value==None: original_column_value = ''
         rtn = "'" + str(original_column_value).strip().replace("'","''") + "'"
         return rtn
 
@@ -805,7 +805,7 @@ class SXTTable(SXTResource):
         def __init__(self, resource:SXTResource) -> None:
             self.__rc__ = resource
 
-        def with_sqltext(self, sql_text:str, biscuits:list = None, user:SXTUser = None, **kwargs) -> (bool, dict):
+        def with_sqltext(self, sql_text:str, biscuits:list = None, user:SXTUser = None, **kwargs) -> tuple[bool, dict]:
             """--------------------
             Submits a single INSERT statement to the Space and Time network.
 
@@ -832,9 +832,29 @@ class SXTTable(SXTResource):
             return success, response
         
 
-        def with_list_of_dicts(self, list_of_dicts:list = [{}], biscuits:list = None, user:SXTUser = None, **kwargs) -> (bool, dict):
+        def list_of_dicts(self, list_of_dicts:list = [{}], biscuits:list = None, user:SXTUser = None, **kwargs) -> tuple[bool, dict]:
             """--------------------
-            Turns a list of dictionaries into multiple INSERT statements and submits for insertion to this resource on the Space and Time Network.
+            Turns a list of dictionaries into multiple distinct INSERT statements and submits for insertion to this resource on the Space and Time Network.
+
+            Each row (dictionary) in the list will be inserted individually, thus can contain a different assortment of columns
+            and data to insert.  This is intended for light-weight inserts of a few thousand rows.  For large-data inserts of streaming 
+            data, check out Space and Time's Kafka streaming service at  https://docs.spaceandtime.io/reference  under Kafka.
+
+            Args:
+                list_of_dicts (str): List of dictionaries, each representing a row of name/value pairs to insert.
+                biscuits (list): List of biscuits to authorize the request. Defaults to all biscuits added to the object.
+                user (SXTUser): User who will execute the request. Defaults to the default user.
+
+            Returns: 
+                bool: Success flag, True if the data was fully inserted, False if any of the records failed.
+                dict: Summary of the insert process, including an error log with any failed insert SQL and individual errors.
+            """
+            return self.with_list_of_dicts(list_of_dicts, biscuits, user, **kwargs)
+
+
+        def with_list_of_dicts(self, list_of_dicts:list = [{}], biscuits:list = None, user:SXTUser = None, **kwargs) -> tuple[bool, dict]:
+            """--------------------
+            Turns a list of dictionaries into multiple distinct INSERT statements and submits for insertion to this resource on the Space and Time Network.
 
             Each row (dictionary) in the list will be inserted individually, thus can contain a different assortment of columns
             and data to insert.  This is intended for light-weight inserts of a few thousand rows.  For large-data inserts of streaming 
@@ -882,6 +902,84 @@ class SXTTable(SXTResource):
             return err==0, {'rows': good+err, 'successes':good, 'errors':err, 'error_list':err_rtn }
 
 
+        def list_of_dicts_batch(self, list_of_dicts:list = [{}], biscuits:list = None, user:SXTUser = None, rows_per_batch:int = 500, **kwargs) -> tuple[bool, dict]:
+            """--------------------
+            Turns a list of dictionaries into batched INSERT statements containing <rows_per_batch> rows per INSERT, and submits for insertion to this resource on the Space and Time Network.
+
+            Batching multiple rows per insert requires all columns to be consistently present for all rows, and in the same order, or the 
+            insert will error.  Each batch will be filled with rows up to rows_per_batch, and the insert will be submitted as one transaction, 
+            making the operation all-or-nothing per batch. If you submit more total rows than the rows_per_batch, rows will be inserted in 
+            multiple batches, each in it's own transaction, making multiple all-or-nothing transactions. This means the final batch will 
+            typically contain fewer rows than rows_per_batch.
+
+            This method is higher performance, but less flexible than individual inserts, making it more suitable for large-scale data loads
+            with more controled inputs.  There is no hard limit to the number of rows_per_batch, however given the all-or-nothing nature of the 
+            batching, it is recommended that rows_per_batch be kept under 1000 to minimize errors.
+
+            Args:
+                list_of_dicts (str): List of dictionaries, each representing a row of name/value pairs to insert.
+                biscuits (list): List of biscuits to authorize the request. Defaults to all biscuits added to the object.
+                user (SXTUser): User who will execute the request. Defaults to the default user.
+                rows_per_batch (int): Number of rows to insert per batch. Defaults to 500.
+
+            Returns: 
+                bool: Success flag, True if the data was fully inserted, False if any of the records failed.
+                dict: Summary of the insert process, including an error log with any failed insert SQL and individual errors.
+            """
+            err_rtn = []
+            good = err = 0
+            row_count = len(list_of_dicts)
+            self.__rc__.logger.info(f'INSERT {row_count} rows into {self.__rc__.resource_name}...')
+
+            # this won't work unless there's an authenticated user:
+            if user is None: user = self.__rc__.user
+            if user is None or user.access_expired: 
+                msg = 'Error: USER provided is access expired or not supplied, please login, provide a SXTUser and try again.'
+                self.__rc__.logger.error(msg)
+                return False, msg
+
+            # ----
+            # build all the insert batches first, so we don't start something we can't finish:
+
+            # determine the column order using the first row:
+            cols = list(list_of_dicts[0].keys())
+
+            # create list of rows, formatted, with consistent col order and ready for insert
+            list_of_rows = ([ f"({', '.join( [self.__rc__.safe_column_value( d[col] ) for col in cols] )})" for d in list_of_dicts])
+            
+            # create batches
+            batches = []
+            for row in range(0, len(list_of_rows), rows_per_batch):
+                batches.append( '\n,'.join(list_of_rows[row:row+rows_per_batch]) )
+
+            # ----
+            # execute the batches 
+            for batch in batches:
+                sql_text = f"INSERT INTO {self.__rc__.resource_name} ({ ', '.join(cols) }) \n VALUES \n {batch}"
+                tries = 0
+                success = False
+                while success == False:
+                    success, result = self.with_sqltext(sql_text=sql_text, biscuits=biscuits, user=user, log=False)
+                    if not success: 
+                        if len(result)>=1 and 'text' in result[0] and 'Duplicate key during INSERT' in result[0]['text']: break # no point in retrying this
+                        time.sleep(2)
+                    if tries >=3: break
+                    tries +=1
+
+                if success: good +=1
+                else: 
+                    err +=1
+                    self.__rc__.logger.warning(f'    Error during insert: {sql_text[:sql_text.find("(")-1]}...')
+                    err_rtn.append((result, sql_text))
+            
+                self.__rc__.logger.info(f'    {self.__rc__.resource_name} Inserted BATCH {good+err} of {row_count} ({(good+err)/row_count:.0%}) - Successes: {good}  Erred: {err}')
+
+            self.__rc__.logger.info(f'INSERT into {self.__rc__.resource_name} complete - Total Rows: {len(list_of_dicts)} ({rows_per_batch} rows per batch), Total Batches: {good+err},  Successes: {good},  Erred: {err}')
+            if not err==0: self.__rc__.__lasterr__ = self.__rc__.SXTExceptions.SxTQueryError(err_rtn)
+            return err==0, { 'Batches': good+err, 'successes':good, 'errors':err, 'error_list':err_rtn, 'rows':len(list_of_rows) }
+
+
+
     class __upd__():
         def __init__(self, resource:SXTResource) -> None:
             self.__rc__ = resource
@@ -914,7 +1012,7 @@ class SXTTable(SXTResource):
             return success, response
         
 
-        def with_list_of_dicts(self, pk_column:str, list_of_dicts:list = [{}], upsert:bool = False, biscuits:list = None, user:SXTUser = None, **kwargs) -> (bool, dict):
+        def with_list_of_dicts(self, pk_column:str, list_of_dicts:list = [{}], upsert:bool = False, biscuits:list = None, user:SXTUser = None, **kwargs) -> tuple[bool, dict]:
             """--------------------
             Turns a list of dictionaries into multiple UPDATE statements and submits for insertion to this resource on the Space and Time Network.
 
@@ -1002,7 +1100,7 @@ class SXTTable(SXTResource):
             return err==0, {'rows': good+err, 'successes':good, 'errors':err, 'error_list':err_rtn }
         
 
-    def delete(self, sql_text:str = None, where:str = '0=1', user:SXTUser = None, biscuits:list = None) -> (bool, dict):
+    def delete(self, sql_text:str = None, where:str = '0=1', user:SXTUser = None, biscuits:list = None) -> tuple[bool, dict]:
         """--------------------
         Deletes records from the table, with a required WHERE statement.
 
@@ -1222,6 +1320,22 @@ class SXTMaterializedView(SXTResource):
 if __name__ == '__main__':
     from pprint import pprint
     print('\n', '-=-='*10, '\n' )
+
+
+    # test creating insert statements, without needing to connect to Space and Time initially
+    chad = SXTUser('.env')
+    chad.authenticate()
+    
+     
+    testtable = SXTTable(name='SXTTEMP.DELETE_TEST', private_key=os.environ['RESOURCE_PRIVATE_KEY'])
+    testtable.add_biscuit('Admin', testtable.PERMISSION.ALL)
+    insertdata = [{'PK_ID':r, 'TEST_GROUP':f"{r}", 'OTHER_DATA':f"{r}"} for r in range(0,100)]
+
+    testtable.delete(where='1=1', user=chad)
+    success, summary = testtable.insert.list_of_dicts_batch(insertdata, rows_per_batch=15, user=chad)
+
+    pass 
+
 
     # Create a user and authenticate:
     suzy = SXTUser('.env', authenticate=True)
