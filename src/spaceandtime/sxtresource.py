@@ -776,32 +776,40 @@ class SXTTable(SXTResource):
         """Returns a dictonary of column_name : data_type as defined in the create_ddl.
         
         Useful when an iterable list of columns (and types) is required, such as building 
-        INSERT statements or view SELECT lists.  Order should be preserved, although as a dict 
-        object type, this is technically not guaranteed.
+        INSERT statements or view SELECT lists.  Pulled from the discovery API - if table
+        does not exist on the network, returns an empty dictionary.
         """
-        # TODO: add property for "column_names" and, if empty, pull from discovery API, save as column_names, and return here.
-        #        if "column_names" is not empty, just return column_names
-        if self.create_ddl == None: return {}
         rtn = {}
+        success, rtn = self.user.base_api.discovery_get_columns(self.schema, self.name)
+        if success:
+            self.__cols__ = {c['column']:c for c in rtn}
+            return {c['column']:c['dataType'] for c in rtn}
+        else: return {}
 
-        # prep ddl to isolate columns 
-        ddl = str(self.create_ddl).replace('\t',' ').replace('\n',' ').strip()
-        while '  ' in ddl: ddl = ddl.replace('  ',' ')
-        first_paren = ddl.find('(')+1
-        for i in range(len(ddl), 1, -1):
-            if ddl[i:i+1] == ')': 
-                last_paren = i 
-                break
-        
-        # process columns
-        cols = [c.strip() for c in ddl[first_paren:last_paren].split(',') ]
-        for col in cols:
-            if col.lower().startswith('primary key'): continue
-            colname = col.split(' ')[0]
-            coltype = col.split(' ')[1]
-            rtn[colname] = coltype
+    __cols__:dict = None
+    @property
+    def column_types(self) -> dict: return self.__cols__
+    column_types.setter
+    def column_types(self, value): self.__cols__ = value
 
-        return rtn 
+        # # prep ddl to isolate columns 
+        # ddl = str(self.create_ddl).replace('\t',' ').replace('\n',' ').strip()
+        # while '  ' in ddl: ddl = ddl.replace('  ',' ')
+        # first_paren = ddl.find('(')+1
+        # for i in range(len(ddl), 1, -1):
+        #     if ddl[i:i+1] == ')': 
+        #         last_paren = i 
+        #         break
+        # 
+        # # process columns
+        # cols = [c.strip() for c in ddl[first_paren:last_paren].split(',') ]
+        # for col in cols:
+        #     if col.lower().startswith('primary key'): continue
+        #     colname = col.split(' ')[0]
+        #     coltype = col.split(' ')[1]
+        #     rtn[colname] = coltype
+        #
+        # return rtn
 
 
     class __ins__():
@@ -1327,12 +1335,14 @@ if __name__ == '__main__':
 
     # test creating insert statements, without needing to connect to Space and Time initially
     chad = SXTUser('.env')
-    chad.authenticate()
+    success, response = chad.authenticate()
     
      
-    testtable = SXTTable(name='SXTTEMP.DELETE_TEST', private_key=os.environ['RESOURCE_PRIVATE_KEY'])
+    testtable = SXTTable(name='SXTTEMP.DELETE_TEST', private_key=os.environ['RESOURCE_PRIVATE_KEY'], default_user=chad)
     testtable.add_biscuit('Admin', testtable.PERMISSION.ALL)
     insertdata = [{'PK_ID':r, 'TEST_GROUP':f"{r}", 'OTHER_DATA':f"{r}"} for r in range(0,100)]
+
+    print(testtable.get_column_names())
 
     testtable.delete(where='1=1', user=chad)
     success, summary = testtable.insert.list_of_dicts_batch(insertdata, rows_per_batch=15, user=chad)
