@@ -676,9 +676,10 @@ class SXTResource():
         """--------------------
         Accepts a string and returns a DB safe insert string, wrapped in quotes with escape characters.
         """
-        if original_column_value==None: original_column_value = ''
-        rtn = "'" + str(original_column_value).strip().replace("'","''") + "'"
-        return rtn
+        return "'" + str(original_column_value).strip().replace("'","''") + "'"  if original_column_value!=None else 'NULL'
+        # if original_column_value==None: original_column_value = 'NULL'
+        # rtn = "'" + str(original_column_value).strip().replace("'","''") + "'"
+        # return rtn
 
 
 
@@ -972,8 +973,10 @@ class SXTTable(SXTResource):
 
             # ----
             # execute the batches 
+            sql_statements = []
             for batch in batches:
                 sql_text = f"INSERT INTO {self.__rc__.resource_name} ({ ', '.join(cols) }) \n VALUES \n {batch}"
+                sql_statements.append(sql_text)
                 tries = 0
                 success = False
                 self.__rc__.logger.debug(f'/n{sql_text}')
@@ -995,7 +998,7 @@ class SXTTable(SXTResource):
 
             self.__rc__.logger.info(f'INSERT into {self.__rc__.resource_name} complete - Total Rows: {len(list_of_dicts)} ({rows_per_batch} rows per batch), Total Batches: {good+err},  Successes: {good},  Erred: {err}')
             if not err==0: self.__rc__.__lasterr__ = self.__rc__.SXTExceptions.SxTQueryError(err_rtn)
-            return err==0, { 'Batches': good+err, 'successes':good, 'errors':err, 'error_list':err_rtn, 'rows':len(list_of_rows) }
+            return err==0, { 'Batches': good+err, 'successes':good, 'errors':err, 'error_list':err_rtn, 'rows':len(list_of_rows), 'sql_statements':sql_statements }
 
 
 
@@ -1348,7 +1351,7 @@ if __name__ == '__main__':
      
     testtable = SXTTable(name='SXTTEMP.DELETE_TEST', private_key=os.environ['RESOURCE_PRIVATE_KEY'], default_user=chad)
     testtable.add_biscuit('Admin', testtable.PERMISSION.ALL)
-    insertdata = [{'PK_ID':r, 'TEST_GROUP':f"{r}", 'OTHER_DATA':f"{r}"} for r in range(0,100)]
+    insertdata = [{'PK_ID':r, 'TEST_GROUP':f"{r}", 'OTHER_DATA':None if r%2==0 else f"{r}"} for r in range(0,100)]
 
     print(testtable.get_column_names())
 
