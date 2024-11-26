@@ -739,7 +739,7 @@ class SXTTable(SXTResource):
     __cols__:dict = None
     @property
     def columns(self) -> dict: 
-        if self.columns is None: self.get_column_names()
+        if self.__cols__ is None: self.get_column_names()
         return self.__cols__
     @columns.setter
     def columns(self, value): self.__cols__ = value
