@@ -976,6 +976,7 @@ class SXTTable(SXTResource):
                 sql_text = f"INSERT INTO {self.__rc__.resource_name} ({ ', '.join(cols) }) \n VALUES \n {batch}"
                 tries = 0
                 success = False
+                self.__rc__.logger.debug(f'/n{sql_text}')
                 while success == False:
                     success, result = self.with_sqltext(sql_text=sql_text, biscuits=biscuits, user=user, log=False)
                     if not success: 
