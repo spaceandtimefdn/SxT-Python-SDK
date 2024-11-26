@@ -735,6 +735,16 @@ class SXTTable(SXTResource):
     def table_name(self, value):
         self.resource_name = value
     
+
+    __cols__:dict = None
+    @property
+    def columns(self) -> dict: 
+        if self.columns is None: self.get_column_names()
+        return self.__cols__
+    @columns.setter
+    def columns(self, value): self.__cols__ = value
+
+
     @property
     def partition_column(self) -> str:
         if 'partition_cols' in self.__with__.keys:
@@ -785,12 +795,6 @@ class SXTTable(SXTResource):
             self.__cols__ = {c['column']:c for c in rtn}
             return {c['column']:c['dataType'] for c in rtn}
         else: return {}
-
-    __cols__:dict = None
-    @property
-    def column_types(self) -> dict: return self.__cols__
-    column_types.setter
-    def column_types(self, value): self.__cols__ = value
 
         # # prep ddl to isolate columns 
         # ddl = str(self.create_ddl).replace('\t',' ').replace('\n',' ').strip()
