@@ -945,6 +945,9 @@ class SXTTable(SXTResource):
             good = err = 0
             row_count = len(list_of_dicts)
             self.__rc__.logger.info(f'INSERT {row_count} rows into {self.__rc__.resource_name}...')
+            if len(list_of_dicts) == 0: 
+                self.__rc__.logger.warning(f'Nothing to insert, skipping')
+                return True, { 'Batches': 0, 'successes':0, 'errors':0, 'error_list':[], 'rows':0 }
 
             # this won't work unless there's an authenticated user:
             if user is None: user = self.__rc__.user
