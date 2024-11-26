@@ -779,6 +779,9 @@ class SXTTable(SXTResource):
         INSERT statements or view SELECT lists.  Order should be preserved, although as a dict 
         object type, this is technically not guaranteed.
         """
+        # TODO: add property for "column_names" and, if empty, pull from discovery API, save as column_names, and return here.
+        #        if "column_names" is not empty, just return column_names
+        if self.create_ddl == None: return {}
         rtn = {}
 
         # prep ddl to isolate columns 
