@@ -1,4 +1,4 @@
-import logging, json, random, time, os
+import logging, json, math, time, os
 from pysteve import pySteve
 from pathlib import Path
 from datetime import datetime
@@ -994,7 +994,7 @@ class SXTTable(SXTResource):
                     self.__rc__.logger.warning(f'    Error during insert: {sql_text[:sql_text.find("(")-1]}...')
                     err_rtn.append((result, sql_text))
             
-                self.__rc__.logger.info(f'    {self.__rc__.resource_name} Inserted BATCH {good+err} of {row_count} ({(good+err)/row_count:.0%}) - Successes: {good}  Erred: {err}')
+                self.__rc__.logger.info(f'    {self.__rc__.resource_name} Inserted BATCH {good+err} of {math.ceil(row_count/rows_per_batch)} ({(good+err)/math.ceil(row_count/rows_per_batch):.0%}) - Successes: {good}  Erred: {err}')
 
             self.__rc__.logger.info(f'INSERT into {self.__rc__.resource_name} complete - Total Rows: {len(list_of_dicts)} ({rows_per_batch} rows per batch), Total Batches: {good+err},  Successes: {good},  Erred: {err}')
             if not err==0: self.__rc__.__lasterr__ = self.__rc__.SXTExceptions.SxTQueryError(err_rtn)
