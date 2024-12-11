@@ -34,8 +34,6 @@ def test_resource_save_load_bug():
     assert tbl2.table_name == tbl.table_name
 
 
-
-
 def test_resource_methods():
     keys = SXTKeyManager(new_keypair=True)
     rs = SXTResource('Test')
@@ -153,6 +151,9 @@ def test_inserts_deletes_updates():
 
     pass
 
+
 if __name__ == '__main__':
+    test_resource_save_load_bug()
+    test_resource_methods()
     test_inserts_deletes_updates()
     pass 

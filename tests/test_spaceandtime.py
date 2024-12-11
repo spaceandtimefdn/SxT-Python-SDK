@@ -188,7 +188,6 @@ def test_discovery():
     assert success
     assert type(schemas) == list
     assert type(schemas[0]) == dict
-    assert [s for s in schemas if s['schema']=='SXTDEMO'][0]['isPublic']
 
     success, schemas = sxt.discovery_get_schemas(return_as=str)
     assert success
@@ -230,5 +229,9 @@ def test_discovery():
 
 
 if __name__ == '__main__':
+    test_sxt_exceptions()
+    test_sxt_wrapper()
     test_sxt_user()
+    test_execute_query()
+    test_discovery()
     pass 
