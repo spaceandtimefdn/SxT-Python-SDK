@@ -6,7 +6,7 @@ from .sxtbiscuits import SXTBiscuit
 
 
 class SXTBaseAPI():
-    api_url = 'https://api.spaceandtime.app'
+    api_url = 'https://api.spaceandtime.dev'
     access_token = ''
     logger: logging.Logger
     network_calls_enabled:bool = True

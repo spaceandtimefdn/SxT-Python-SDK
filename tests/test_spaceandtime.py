@@ -8,7 +8,7 @@ from spaceandtime.spaceandtime import SXTUser
 from spaceandtime.sxtkeymanager import SXTKeyManager
 from spaceandtime.sxtbiscuits import SXTBiscuit
 from spaceandtime.sxtexceptions import *  # only contains exceptions prefixed with "SXT"
-API_URL = 'https://api.spaceandtime.app'
+API_URL = 'https://api.spaceandtime.dev'
 
 
 def test_sxt_exceptions():
@@ -88,7 +88,7 @@ def test_sxt_user():
     sxt = None
 
     # UserA -- load .env file
-    userA = SXTUser(dotenv_file='./.env')
+    userA = SXTUser(dotenv_file='./.env', api_url=API_URL)
     assert userA.user_id == 'pySDK_tester'
     assert userA.public_key == "Lu8fefHsAYxKfj7oaCx+Rtz7eNiPln6xbOxJJo0aIZQ="
     assert userA.private_key[:6] == 'MeaW6J'
@@ -230,5 +230,5 @@ def test_discovery():
 
 
 if __name__ == '__main__':
-    test_sxt_wrapper()
+    test_sxt_user()
     pass 

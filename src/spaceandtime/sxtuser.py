@@ -8,7 +8,6 @@ from .sxtbaseapi import SXTBaseAPI, SXTApiCallTypes
 
 class SXTUser():
     user_id: str = ''
-    api_url: str = ''
     logger: logging.Logger = None 
     key_manager: SXTKeyManager = None
     ENCODINGS = SXTKeyEncodings
@@ -58,7 +57,7 @@ class SXTUser():
         # overwrite userid, api_url, and private key (and public key, by extension), if supplied
         if user_private_key: self.private_key = user_private_key
         if user_id: self.user_id = user_id
-        if api_url: self.api_url = api_url
+        if api_url: self.base_api.api_url = api_url
 
         # secret option: make a test user_id if requested:
         if 'testuser' in kwargs: 
@@ -88,6 +87,13 @@ class SXTUser():
     @encoding.setter
     def encoding(self, value):
         self.key_manager.encoding = value 
+
+    @property
+    def api_url(self) -> str:
+        return self.base_api.api_url
+    @api_url.setter
+    def api_url(self, value):
+        self.base_api.api_url = value
 
     @property
     def access_token_expire_datetime(self) -> datetime.datetime:
