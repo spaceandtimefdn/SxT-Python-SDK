@@ -6,7 +6,7 @@ from .sxtbiscuits import SXTBiscuit
 
 
 class SXTBaseAPI():
-    api_url = 'https://api.spaceandtime.dev'
+    __au__:str = None 
     access_token = ''
     logger: logging.Logger
     network_calls_enabled:bool = True
@@ -32,8 +32,16 @@ class SXTBaseAPI():
         with open(apiversionfile,'r') as fh:
             content = fh.read()
         self.versions = json.loads(content)
+        
 
 
+    @property
+    def api_url(self):
+        return self.__au__ if self.__au__ else 'https://api.spaceandtime.dev' # default 
+    @api_url.setter
+    def api_url(self, value):
+        self.__au__ = value
+        
     def prep_biscuits(self, biscuits=[]) -> list:
         """--------------------
         Accepts biscuits in various data types, and returns a list of biscuit_tokens as strings (list of str).  
