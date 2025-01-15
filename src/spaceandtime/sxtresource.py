@@ -212,7 +212,7 @@ class SXTResource():
             self.logger.debug(f'testing whether {self.resource_name} exists:  {str(does_exist)}')
             return does_exist 
         else:
-            self.logger.warning(f'There was a problem deteriming whether resource exists: {self.resource_name} (returning None)\n{resources}')
+            self.logger.warning(f'There was a problem determining whether resource exists: {self.resource_name} (returning None)\n{resources}')
             return None
 
 
@@ -241,7 +241,7 @@ class SXTResource():
         """Adds one-or-more SXTBiscuit objects to the resource.
         
         Args:
-            bsicuit_objects (SXTBiscuit): Biscuit objects to add to resource
+            biscuit_objects (SXTBiscuit): Biscuit objects to add to resource
 
         Returns:
             list: objects added 
@@ -771,7 +771,7 @@ class SXTTable(SXTResource):
 
 
     def get_column_names(self) -> dict:
-        """Returns a dictonary of column_name : data_type as defined in the create_ddl.
+        """Returns a dictionary of column_name : data_type as defined in the create_ddl.
         
         Useful when an iterable list of columns (and types) is required, such as building 
         INSERT statements or view SELECT lists.  Order should be preserved, although as a dict 
@@ -916,7 +916,7 @@ class SXTTable(SXTResource):
             """--------------------
             Turns a list of dictionaries into multiple UPDATE statements and submits for insertion to this resource on the Space and Time Network.
 
-            Each row (dictionary) in the list will be coverted to an update statement individually, thus can contain a different 
+            Each row (dictionary) in the list will be converted to an update statement individually, thus can contain a different 
             assortment of columns and data to update. Rows updated this way are always identified by the unique Primary Key, 
             so the pk_column must be specified, must match the PK column name in the table definition, and must appear in every 
             row in the list_of_dicts.  To perform arbitrary UPDATES against multiple rows, us the "with_sqltext()" function.
