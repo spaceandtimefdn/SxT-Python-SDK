@@ -218,7 +218,7 @@ class SXTKeyManager():
 
         """
         if type(message)!=str: 
-            raise ValueError(f'paramter: "message" must be a string type, not {str(type(message))}')
+            raise ValueError(f'parameter: "message" must be a string type, not {str(type(message))}')
         try:
             if not encoding_out: encoding_out = self.encoding
             signing_object = nacl.signing.SigningKey(bytes(self.__pv))
