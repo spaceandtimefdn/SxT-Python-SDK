@@ -16,6 +16,7 @@
     "encryption/configure":        "v1",
     "sql/queries/{queryName}":     "v2",
     "sql/queries-by-id/{queryId}": "v2",
+    "sql/tamperproof-query":       "v2",
     "discover/schema":                        "v2",
     "discover/table":                         "v2", 
     "discover/view":                          "v2", 

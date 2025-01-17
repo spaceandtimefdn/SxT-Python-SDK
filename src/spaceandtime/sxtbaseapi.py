@@ -533,6 +533,26 @@ class SXTBaseAPI():
         success, rtn = self.call_api('sql/dql', True, header_parms=headers, data_parms=dataparms)
         return success, rtn if success else [rtn]
 
+    def sql_exec_tamperproof(self, sql_text:str, biscuits:list = None):
+        """--------------------
+        Executes a ZK tamperproof database statement/query, and returns a status or data plus a ZK verification code.
+
+        Args:        
+            sql_text (str): SQL query text to execute. Note, there is NO placeholder replacement.
+            biscuits (list): (optional) List of biscuit tokens for permissioned tables. If only querying public tables, this is not needed.
+
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            object: Response information from the Space and Time network, as list or dict(json). 
+        """
+        sql_text = self.prep_sql(sql_text=sql_text)
+        biscuit_tokens = self.prep_biscuits(biscuits)
+        if type(biscuit_tokens) != list:  raise SxTArgumentError("sql_all requires parameter 'biscuits' to be a list of biscuit_tokens or SXTBiscuit objects.",  logger = self.logger)
+        dataparms = {"sqlText": sql_text
+                    ,"biscuits": biscuit_tokens }
+        success, rtn = self.call_api('sql/tamperproof-query', True, data_parms=dataparms)
+        return success, rtn if success else [rtn]
+
 
     def discovery_get_schemas(self, scope:str = 'ALL'):
         """--------------------

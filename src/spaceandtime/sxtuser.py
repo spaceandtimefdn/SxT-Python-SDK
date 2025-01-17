@@ -34,6 +34,8 @@ class SXTUser():
             if not application_name: self.application_name = SpaceAndTime_parent.application_name
             if not logger: logger = SpaceAndTime_parent.logger
             self.start_time = SpaceAndTime_parent.start_time if SpaceAndTime_parent.start_time else datetime.datetime.now()
+        else: 
+            self.start_time = datetime.datetime.now()
 
         if logger: 
             self.logger = logger 
@@ -361,10 +363,46 @@ class SXTUser():
         This is a duplicate of the "execute_query" method, provided for backwards compatibility.
         Use the more consistent "execute_query" to avoid future deprecation issues. 
         """
+        self.logger.warning('execute_sql is deprecated. Use execute_query() instead.')
         return self.execute_query(sql_text=sql_text, biscuits=biscuits, app_name=app_name)
 
+
     def execute_query(self, sql_text:str, biscuits:list = None, app_name:str = None):
+        """
+        Execute a SQL query, returning success flag and data.
+        
+        Args:
+            sql_text (str): SQL text to execute.
+            biscuits (list): List of biscuits required to authorize this request.
+            app_name (str): Name of the application making the request.
+        
+        Returns:
+            bool: Success flag (True/False) indicating the call worked as expected.
+            list: Data (as list of dicts) if successful, otherwise an error object.
+        """
         return self.base_api.sql_exec(sql_text=sql_text, biscuits=biscuits, app_name=app_name)
+    
+
+    def execute_zkproven_query(self, sql_text:str, biscuits:list = None):
+        """
+        Execute a zkProven SQL query, returning success flag, data, and zk metadata.
+        
+        Args:
+            sql_text (str): SQL text to execute.
+            biscuits (list): List of biscuits required to authorize this request.
+        
+        Returns:
+            bool: Success flag (True/False) indicating the call worked as expected.
+            list: Data (as list of dicts) if successful, otherwise an error object.
+            object: Metadata reciept from the ZK Prover and Verifier.
+        """
+        rtn = self.base_api.sql_exec_tamperproof(sql_text=sql_text, biscuits=biscuits)
+        if not rtn[0]: return rtn[0], rtn[1], {}
+        data = rtn[1].pop('data') if 'data' in rtn[1] else []
+        metadata = { "requestId": rtn[1]['requestId'] if 'requestId' in rtn[1] else ''
+                    ,"requestTimestamp":rtn[1]['requestTimestamp'] if 'requestTimestamp' in rtn[1] else ''
+                    ,"verificationHash":rtn[1]['metadata']['verificationHash'] if 'metadata' in rtn[1] and 'verificationHash' in rtn[1]['metadata'] else ''}
+        return rtn[0], data, metadata
 
 
     def generate_joincode(self, role:str = 'member'):
@@ -448,6 +486,11 @@ class SXTUser():
 
 
 if __name__ == '__main__':
+
+    # PoSQL Query Test:
+    usr = SXTUser(authenticate=True)
+    print( usr )
+    success, data, metadata = usr.execute_zkproven_query("select * from SXTTEMP_TP.TEMPERATURE_V02")
 
     # BASIC USAGE
     user = SXTUser(user_id = 'suzy')
