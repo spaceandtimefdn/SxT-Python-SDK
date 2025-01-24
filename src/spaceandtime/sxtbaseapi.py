@@ -95,10 +95,11 @@ class SXTBaseAPI():
             >>> newsql == "Select 'complex \nstring   ' as A from TableName Where A=1"
             True
         """
+        if sql_text == None or len(sql_text.strip()) == 0: return ''
         insinglequote = False
         indoublequote = False 
         rtn = []
-        prevchar = ''
+        char = prevchar = ''
         for char in list(sql_text.strip()):
 
             # escape anything in quotes
