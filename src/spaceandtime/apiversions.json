@@ -35,5 +35,6 @@
     "subscription/leave":                    "v1",
     "subscription/remove/{userId}":           "v1",   
     "subscription/setrole/{userId}":          "v1",
-    "subscription/users":                     "v1"
+    "subscription/users":                     "v1",
+    "subscription/name":                      "v1"
 }

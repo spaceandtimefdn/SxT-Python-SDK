@@ -130,7 +130,7 @@ class SXTBaseAPI():
                  header_parms: dict = {}, 
                  data_parms: dict = {}, 
                  query_parms: dict = {}, 
-                 path_parms: dict = {} ):
+                 path_parms: dict = {} ) -> tuple[bool, object]:
         """--------------------
         Generic function to call and return SxT API. 
 
@@ -639,6 +639,22 @@ class SXTBaseAPI():
     
 
 
+    def subscription_set_name(self, name:str) -> tuple[bool, dict]:
+        """--------------------
+        Assigns a user-friendly name to an existing subscription.
+        
+        Args: 
+            name (str): Subscription user-friendly name.  
+
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            object: Response information from the Space and Time network, as list or dict(json). 
+        """
+        if len(name)==0: return False, 'Name cannot be empty.'
+        success, rtn = self.call_api('subscription/name', True, SXTApiCallTypes.PUT, query_parms={'subscriptionName':name})
+        return success, {n:v for n,v in rtn.items() if v} if success else rtn
+
+
     def subscription_get_info(self):
         """--------------------
         Retrieves information on the authenticated user's subscription from the Space and Time network.
@@ -783,13 +799,15 @@ class SXTBaseAPI():
 
 if __name__ == '__main__':
 
-    token = 'eyJ0eXBlIjoiYWNjZXNzIiwia2lkIjoiZTUxNDVkYmQtZGNmYi00ZjI4LTg3NzItZjVmNjNlMzcwM2JlIiwiYWxnIjoiRVMyNTYifQ.eyJpYXQiOjE2OTU5MTQxMjgsIm5iZiI6MTY5NTkxNDEyOCwiZXhwIjoxNjk1OTE1NjI4LCJ0eXBlIjoiYWNjZXNzIiwidXNlciI6InN0ZXBoZW4iLCJzdWJzY3JpcHRpb24iOiIzMWNiMGI0Yi0xMjZlLTRlM2MtYTdhMS1lNWRmNDc4YTBjMDUiLCJzZXNzaW9uIjoiNTg2OTQyOTgzMjc2OTkyNzI5MDViMDQyIiwic3NuX2V4cCI6MTY5NjAwMDUyODQ2OSwiaXRlcmF0aW9uIjoiZDc0M2Y1YjRkNTkyYzdmNjU4ZDA5ZmM2In0.lKjO0CbQ4k8hAEPsbs9nL1qXGzm01ZfJEF_l8NiRQRbTBkrdPV53H8lzdJsHTpGdcgSvsgbwpxzKvUnqyl1cAg'
+    token = 'eyJ0eXBlIjoiYWNjZXNzIiwia2lkIjoiZTUxNDVkYmQtZGNmYi00ZjI4LTg3NzItZjVmNjNlMzcwM2JlIiwiYWxnIjoiRVMyNTYifQ.eyJpYXQiOjE3Mzg3MTAxMDQsIm5iZiI6MTczODcxMDEwNCwiZXhwIjoxNzM4NzExNjA0LCJ0eXBlIjoiYWNjZXNzIiwidXNlciI6InN0ZXBoZW4iLCJzdWJzY3JpcHRpb24iOiIzMWNiMGI0Yi0xMjZlLTRlM2MtYTdhMS1lNWRmNDc4YTBjMDUiLCJzZXNzaW9uIjoiMjAwMTMzN2EyZDdmZmIxMGU1ZDJlM2Y1Iiwic3NuX2V4cCI6MTczODc5NjUwNDI3OSwiaXRlcmF0aW9uIjoiZWQ2MjhkYTU2NTVmZjQzZGU3OTMxODg1In0.NUkgbTcgUWLYJaJVoRrh_evNJlp0IiCYUGR3oV7_JILpg4g-UQO1ojsHutcGp5a72uBO5vHy75Nsq8s-VaEYgA'
     api = SXTBaseAPI(token)
     
+    success, response = api.subscription_set_name('SXT Labs')
+
     print( api.subscription_get_info() )
     success, users = api.subscription_get_users() 
 
-    success, response = api.subscription_invite_user(role='owner')
+    success, response = api.subscription_invite_user(role='member')
     joincode = response['text']
 
     print( api.subscription_join(joincode=joincode) )

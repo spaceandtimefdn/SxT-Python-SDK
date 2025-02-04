@@ -6,9 +6,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "spaceandtime"
-version = "1.1.50"
+version = "1.1.52"
 description = "SDK for Space and Time verifiable database"
-authors = [{ name = "Stephen Hilton", email = "stephen.hilton@spaceandtime.io" }]
+authors = [{ name = "Stephen Hilton", email = "stephen@spaceandtime.io" }]
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
