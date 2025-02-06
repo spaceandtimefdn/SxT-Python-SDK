@@ -264,7 +264,7 @@ class SXTBaseAPI():
         return self.auth_code(user_id, prefix, joincode)
     
 
-    def auth_code(self, user_id:str, prefix:str = None) -> tuple[bool, object]:
+    def auth_code(self, user_id:str, prefix:str = None, joincode:str = None) -> tuple[bool, object]:
         """--------------------
         Calls and returns data from API: auth/code, which issues a random challenge token to be signed as part of the authentication workflow.
         
@@ -279,7 +279,10 @@ class SXTBaseAPI():
         """
         dataparms = {"userId": user_id}
         if prefix: dataparms["prefix"] = prefix
-        success, rtn = self.call_api(endpoint = 'auth/code', auth_header = False, data_parms = dataparms)
+        if joincode: 
+            success, rtn = self.auth_code_register(user_id, prefix, joincode)
+        else:
+            success, rtn = self.call_api(endpoint = 'auth/code', auth_header = False, data_parms = dataparms)
         return success, rtn if success else [rtn]
 
 

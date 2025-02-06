@@ -546,7 +546,7 @@ class SXTUser():
 
     def gateway_proxy_change_password(self, old_password:str, new_password:str) -> tuple[bool, dict]:
         """-------------------- 
-        Logs into the gateway proxy and changes the user's password. Assuming the old_password still works, does not require network authentication.
+        Logs into the gateway proxy and changes the user's password.  Old password is required to login / authenticate change.
 
         Args: 
             old_password (str): Current, working password
@@ -556,7 +556,7 @@ class SXTUser():
             bool: Success flag (True/False) indicating the api call worked as expected.
             object: Response information from the Gateway Proxy, as list or dict(json). 
         """  
-        success, response = self.base_api.gateway_proxy_change_password(user.user_id, old_password, new_password)
+        success, response = self.base_api.gateway_proxy_change_password(self.user_id, old_password, new_password)
         if success and 'accessToken' in response and 'refreshToken' in response and 'accessTokenExpires' in response and 'refreshTokenExpires' in response : 
             self.__settokens__(response['accessToken'], response['refreshToken'], response['accessTokenExpires'], response['refreshTokenExpires'])
         return success, response
