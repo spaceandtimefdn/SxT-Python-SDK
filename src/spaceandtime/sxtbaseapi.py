@@ -130,7 +130,8 @@ class SXTBaseAPI():
                  header_parms: dict = {}, 
                  data_parms: dict = {}, 
                  query_parms: dict = {}, 
-                 path_parms: dict = {} ) -> tuple[bool, object]:
+                 path_parms: dict = {},
+                 endpoint_full_override_flag: bool = False ) -> tuple[bool, object]:
         """--------------------
         Generic function to call and return SxT API. 
 
@@ -146,6 +147,7 @@ class SXTBaseAPI():
             query_parms: (dict): Name/value pairs to be added to the query string. {Name: Value}
             data_parms (dict): Dictionary to be used holistically for --data json object.
             path_parms (dict): Pattern to replace placeholders in URL. {Placeholder_in_URL: Replace_Value}
+            endpoint_full_override_flag (str): If True, endpoint is used verbatium, rather than constructing version + endpoint. Will negate any querystring or path parms.
 
         Results:
             bool: Indicating request success
@@ -170,31 +172,37 @@ class SXTBaseAPI():
 
         # otherwise, go get real data
         try:
-            if endpoint not in self.versions.keys(): 
-                raise SxTAPINotDefinedError("Endpoint not defined in API Lookup (apiversions.json). Please reach out to Space and Time for assistance. \nAs a work-around, you can try manually adding the endpoint to the SXTBaseAPI.versions dictionary.")
-            version = self.versions[endpoint]
-            self.logger.debug(f'API Call started for endpoint: {version}/{endpoint}')
-
-            if request_type not in SXTApiCallTypes: 
-                msg = f'request_type must be of type SXTApiCallTypes, not { type(request_type) }'
-                raise SxTArgumentError(msg, logger=self.logger)
-           
-            # Path parms
-            for name, value in path_parms.items():
-                endpoint = endpoint.replace(f'{{{name}}}', value)
-            
-            # Query parms
-            if query_parms !={}: 
-                endpoint = f'{endpoint}?' + '&'.join([f'{n}={v}' for n,v in query_parms.items()])
-            
             # Header parms
             headers = {k:v for k,v in self.standard_headers.items()} # get new object
             if auth_header: headers['authorization'] = f'Bearer {self.access_token}'
             headers.update(header_parms)
 
-            # final URL
-            url = f'{self.api_url}/{version}/{endpoint}'
 
+            if endpoint_full_override_flag:
+                url = endpoint
+                self.logger.debug(f'API Call started for (custom) endpoint: {endpoint}')
+
+            else:
+                if endpoint not in self.versions.keys() and not endpoint_full_override_flag: 
+                    raise SxTAPINotDefinedError("Endpoint not defined in API Lookup (apiversions.json). Please reach out to Space and Time for assistance. \nAs a work-around, you can try manually adding the endpoint to the SXTBaseAPI.versions dictionary.")
+                version = self.versions[endpoint]
+                self.logger.debug(f'API Call started for endpoint: {version}/{endpoint}')
+            
+                # Path parms
+                for name, value in path_parms.items():
+                    endpoint = endpoint.replace(f'{{{name}}}', value)
+                
+                # Query parms
+                if query_parms !={}: 
+                    endpoint = f'{endpoint}?' + '&'.join([f'{n}={v}' for n,v in query_parms.items()])
+
+                # final URL
+                url = f'{self.api_url}/{version}/{endpoint}'
+
+            if request_type not in SXTApiCallTypes: 
+                msg = f'request_type must be of type SXTApiCallTypes, not { type(request_type) }'
+                raise SxTArgumentError(msg, logger=self.logger)
+            
             match request_type:
                 case SXTApiCallTypes.POST   : callfunc = requests.post
                 case SXTApiCallTypes.GET    : callfunc = requests.get
@@ -256,7 +264,7 @@ class SXTBaseAPI():
         return self.auth_code(user_id, prefix, joincode)
     
 
-    def auth_code(self, user_id:str, prefix:str = None, joincode:str = None):
+    def auth_code(self, user_id:str, prefix:str = None) -> tuple[bool, object]:
         """--------------------
         Calls and returns data from API: auth/code, which issues a random challenge token to be signed as part of the authentication workflow.
         
@@ -271,8 +279,106 @@ class SXTBaseAPI():
         """
         dataparms = {"userId": user_id}
         if prefix: dataparms["prefix"] = prefix
-        if joincode: dataparms["joincode"] = joincode
         success, rtn = self.call_api(endpoint = 'auth/code', auth_header = False, data_parms = dataparms)
+        return success, rtn if success else [rtn]
+
+
+    def gateway_proxy_add_existing_user(self, access_token:str) -> tuple[bool, object]:
+        """-------------------- 
+        Adds an authenticated user to the gateway proxy.  Fails if the user is not authenticated.
+
+        Args: 
+            user_id (str): UserID to be authenticated
+
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            dict: New Studio Password, or error message in a dict(json).
+        """        
+        endpoint = f'https://proxy.api.spaceandtime.dev/auth/add-existing?accessToken={access_token}'
+        success, response = self.call_api(endpoint = endpoint, 
+                                          auth_header = False, 
+                                          endpoint_full_override_flag=True)
+        self.logger.warning(f'add_user_to_gateway_proxy: {response}')
+        if success and 'tempPassword' in response: response = response['tempPassword']
+        return success, response
+
+
+
+    def gateway_proxy_login (self, user_id:str, password:str) -> tuple[bool, object]:
+        """-------------------- 
+        Login to the gateway proxy, and return the session id.
+
+        Args: 
+            user_id (str): UserID to be authenticated
+            password (str): Current, working password
+
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            object: Response information from the Gateway Proxy, including the session id, access token, etc.
+        """        
+        endpoint = 'https://proxy.api.spaceandtime.dev/auth/login'
+        success, response = self.call_api(endpoint = endpoint, 
+                                          auth_header = False, 
+                                          data_parms = {"userId": user_id, "password": password},
+                                          endpoint_full_override_flag=True)
+        return success, response
+
+
+
+    def gateway_proxy_change_password(self, user_id:str, old_password:str, new_password:str, session_id:str = None) -> tuple[bool, object]:
+        """-------------------- 
+        Logs into the gateway proxy and changes the user's password. Assuming the old_password still works, does not require network authentication.
+
+        Args: 
+            user_id (str): UserID to be authenticated
+            old_password (str): Current, working password
+            new_password (str): New password
+            session_id (str): (optional) Session ID if already authenticated, otherwise this function will login and return authentication information as well.
+
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            object: Response information from the Gateway Proxy, as list or dict(json). 
+        """        
+        endpoint = 'https://proxy.api.spaceandtime.dev/auth/reset'
+        if not session_id:
+            success, login_response = self.gateway_proxy_login(user_id, old_password)
+            if not success: 
+                raise SxTArgumentError(f'Failed to log into gateway proxy: {login_response}')
+            session_id = login_response['sessionId']
+ 
+        success, response = self.call_api(endpoint = endpoint, 
+                                          auth_header = False, 
+                                          header_parms={"sid": session_id},
+                                          data_parms = {"userId": user_id, "sid": session_id, 
+                                                        "tempPassword": old_password, "newPassword": new_password},
+                                          endpoint_full_override_flag=True)
+        self.logger.warning(f'changed gateway proxy password: {response}')
+        if login_response: response.update(login_response)
+        response['password'] = new_password
+        return success, response
+
+
+
+
+    def auth_code_register(self, user_id:str, email:str, joincode:str = None, prefix:str = None) -> tuple[bool, object]:
+        """--------------------
+        Calls and returns data from API: auth/code-register, which issues a random challenge token to be signed as part of the authentication workflow, but also requires additional information with which to register a new user on the network.
+        
+        Args: 
+            user_id (str): UserID to be authenticated
+            email (str): Email address to validate new user
+            joincode (str): (optional) Joincode if creating a new user within an existing subscription. 
+            prefix (str): (optional) The message prefix for signature verification (used for improved front-end UX).
+
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            object: Response information from the Space and Time network, as list or dict(json). 
+        """
+        dataparms = {"userId": user_id, "email": email}
+        if prefix: dataparms["joincode"] = joincode
+        if prefix: dataparms["prefix"] = prefix
+
+        success, rtn = self.call_api(endpoint = 'auth/code-register', auth_header = False, data_parms = dataparms)
         return success, rtn if success else [rtn]
 
 
@@ -801,6 +907,8 @@ if __name__ == '__main__':
 
     token = 'eyJ0eXBlIjoiYWNjZXNzIiwia2lkIjoiZTUxNDVkYmQtZGNmYi00ZjI4LTg3NzItZjVmNjNlMzcwM2JlIiwiYWxnIjoiRVMyNTYifQ.eyJpYXQiOjE3Mzg3MTAxMDQsIm5iZiI6MTczODcxMDEwNCwiZXhwIjoxNzM4NzExNjA0LCJ0eXBlIjoiYWNjZXNzIiwidXNlciI6InN0ZXBoZW4iLCJzdWJzY3JpcHRpb24iOiIzMWNiMGI0Yi0xMjZlLTRlM2MtYTdhMS1lNWRmNDc4YTBjMDUiLCJzZXNzaW9uIjoiMjAwMTMzN2EyZDdmZmIxMGU1ZDJlM2Y1Iiwic3NuX2V4cCI6MTczODc5NjUwNDI3OSwiaXRlcmF0aW9uIjoiZWQ2MjhkYTU2NTVmZjQzZGU3OTMxODg1In0.NUkgbTcgUWLYJaJVoRrh_evNJlp0IiCYUGR3oV7_JILpg4g-UQO1ojsHutcGp5a72uBO5vHy75Nsq8s-VaEYgA'
     api = SXTBaseAPI(token)
+
+    success, response = api.auth_code_register(user_id = 'poopsylicious', joincode='', email = 's@a.com')
     
     success, response = api.subscription_set_name('SXT Labs')
 

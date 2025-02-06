@@ -8,6 +8,8 @@ from .sxtbaseapi import SXTBaseAPI, SXTApiCallTypes
 
 class SXTUser():
     user_id: str = ''
+    email: str = ''
+    gateway_password = ''
     logger: logging.Logger = None 
     key_manager: SXTKeyManager = None
     ENCODINGS = SXTKeyEncodings
@@ -297,15 +299,14 @@ class SXTUser():
         self.base_api.access_token = self.access_token
 
 
-    def authenticate(self) -> str:
-        return self.register_new_user()
-
-    def register_new_user(self, join_code:str = None) -> str:
+    def register_new_user(self, user_id:str = None, email:str = None, join_code:str = None) -> tuple[bool, object]:
         """--------------------
-        Authenticate to the Space and Time network, and store access_token and refresh_token.
+        Create a new user on the Space and Time network, then authenticate.
 
         Args: 
-            join_code (str): Optional to create a new user within an existing subscription.
+            user_id (str): User ID to create - if not provided, will default to self.user_id.
+            email (str): Email address to validate the user id - if not provided, will default to self.email.
+            join_code (str): (Optional) Join code to create a new user within an existing subscription.
         
         Returns:
             bool: Success flag (True/False) indicating the call worked as expected.
@@ -315,7 +316,49 @@ class SXTUser():
             raise SxTArgumentError('Must have valid UserID and Private Key to authenticate.', logger=self.logger)
         
         try: 
-            success, response = self.base_api.get_auth_challenge_token(user_id = self.user_id, joincode=join_code)
+            if not user_id: user_id = self.user_id
+            if not email: email = self.email
+            if not user_id or not email: 
+                raise SxTArgumentError('Must have valid UserID and Email to register a new user.', logger=self.logger)
+            
+            success, response = self.base_api.auth_code_register(user_id = self.user_id, email = email, joincode = join_code)
+            if success:
+                challenge_token = response['authCode']
+                signed_challenge_token = self.key_manager.sign_message(challenge_token)
+                success, response = self.base_api.get_access_token(user_id = self.user_id, 
+                                                                   challange_token = challenge_token, 
+                                                                   signed_challange_token = signed_challenge_token,
+                                                                   public_key = self.public_key)
+            if success:
+                tokens = response
+                self.email = email
+                self.user_id = user_id
+            else: 
+                raise SxTAuthenticationError(str(response), logger=self.logger)
+            if len( [v for v in tokens if v in ['accessToken','refreshToken','accessTokenExpires','refreshTokenExpires']] ) < 4:
+                raise SxTAuthenticationError('Authentication produced incorrect / incomplete output', logger=self.logger)
+        except SxTAuthenticationError as ex:
+            return False, [ex]
+
+        self.__settokens__(tokens['accessToken'], tokens['refreshToken'], tokens['accessTokenExpires'], tokens['refreshTokenExpires'])
+        return True, self.access_token 
+
+
+        return self.authenticate()
+
+    def authenticate(self) -> tuple[bool, object]:
+        """--------------------
+        Authenticate to the Space and Time network, and store access_token and refresh_token.
+        
+        Returns:
+            bool: Success flag (True/False) indicating the call worked as expected.
+            object: Access_Token if successful, otherwise an error object.
+        """
+        if not (self.user_id and self.private_key):
+            raise SxTArgumentError('Must have valid UserID and Private Key to authenticate.', logger=self.logger)
+        
+        try: 
+            success, response = self.base_api.get_auth_challenge_token(user_id = self.user_id)
             if success:
                 challenge_token = response['authCode']
                 signed_challenge_token = self.key_manager.sign_message(challenge_token)
@@ -333,9 +376,6 @@ class SXTUser():
             return False, [ex]
 
         self.__settokens__(tokens['accessToken'], tokens['refreshToken'], tokens['accessTokenExpires'], tokens['refreshTokenExpires'])
-        if join_code and ('disconnected' in str(self.subscription_id).strip() or str(self.subscription_id).strip() == ''): 
-            success, response = self.join_subscription(join_code) 
-
         return True, self.access_token 
 
 
@@ -444,6 +484,7 @@ class SXTUser():
         if self.access_expired: return False, {"error":"disconnected - authenticate to leave subscription"}
         return self.base_api.subscription_leave()
         
+
     def remove_from_subscription(self, user_id_to_remove:str) -> tuple[bool, dict]:
         """
         Removes another user from the current user's subscription.  Current user must have more authority than the targeted user to remove.
@@ -482,31 +523,77 @@ class SXTUser():
         else:
             self.logger.error(response) 
             return False, response
+        
+
+    def gateway_proxy_login(self, user_id:str = None, password:str = None) -> tuple[bool, dict]:
+        """
+        Login to the gateway proxy as a user, and return authentication tokens, like session_id and access_token.
+        
+        Args:
+            user_id (str): User ID to login as.
+            password (str): Password of the user to login as.
+
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            object: Access token from the gateway proxy.
+        """
+        if not user_id: user_id = self.user_id
+        if not self.user_id: self.user_id = user_id
+        if not password: password = self.gateway_password
+        if not self.gateway_password: self.gateway_password = password
+        return  self.base_api.gateway_proxy_login(user_id, password)
+        
+
+    def gateway_proxy_change_password(self, old_password:str, new_password:str) -> tuple[bool, dict]:
+        """-------------------- 
+        Logs into the gateway proxy and changes the user's password. Assuming the old_password still works, does not require network authentication.
+
+        Args: 
+            old_password (str): Current, working password
+            new_password (str): New password
+
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            object: Response information from the Gateway Proxy, as list or dict(json). 
+        """  
+        success, response = self.base_api.gateway_proxy_change_password(user.user_id, old_password, new_password)
+        if success and 'accessToken' in response and 'refreshToken' in response and 'accessTokenExpires' in response and 'refreshTokenExpires' in response : 
+            self.__settokens__(response['accessToken'], response['refreshToken'], response['accessTokenExpires'], response['refreshTokenExpires'])
+        return success, response
+
+    def gateway_proxy_join(self, access_token:str = None) -> tuple[bool, dict]:
+        """-------------------- 
+        ONLY NEEDS TO BE COMPLETED ONCE: Adds an authenticated user to the gateway proxy.  Fails if the user is not authenticated.
+
+        Args: 
+            access_token (str): Authenticated access token for the user.
+
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            dict: New Studio Password, or error message in a dict(json).
+        """        
+        if not access_token: access_token = self.access_token
+        if self.access_expired: 
+            return False, {"error":"disconnected - authenticate to join gateway proxy"}
+        return self.base_api.gateway_proxy_add_existing_user(access_token)
 
 
 
 if __name__ == '__main__':
 
     # PoSQL Query Test:
-    usr = SXTUser(authenticate=True)
-    print( usr )
-    success, data, metadata = usr.execute_zkproven_query("select * from SXTTEMP_TP.TEMPERATURE_V02")
-
-    # BASIC USAGE
-    user = SXTUser(user_id = 'suzy')
-    user.key_manager.new_keypair()
-    user.save('test/suzy.env')
-    print( user )
-
-    suzy = SXTUser(encoding = SXTKeyEncodings.HEX)
-    suzy.load('test/suzy.env')
-    print( suzy )
-
-    bill = SXTUser(user_id='bill', user_private_key='Z833BwZcwotJf4zVA89HlyvxH8xqAUOXzTcR1dWhsrk=')
-    bill.save('test/bill.env')
-    print( bill )
-
-    stephen = SXTUser()
-    stephen.authenticate()
-
+    import random
+    km = SXTKeyManager(private_key = 'teststeve+otJf4zVA8HlyvxH8xqAUOXzTcR1dWhsrk=')
+    km.encoding = km.ENCODINGS.BASE64
+    
+    user = SXTUser(user_id = f'teststeve_{random.randrange(0,100000000)}' )
+    user.key_manager = km
+    
+    sucsess, response = user.register_new_user(email=f'{user.user_id}@example.com')
+    sucsess, password = user.gateway_proxy_join()
+    sucsess, response = user.gateway_proxy_change_password(old_password=password, new_password='teststeve+ot')
+    password = response['password']
+    sucsess, response = user.gateway_proxy_login(password=password)
+    
+ 
     pass

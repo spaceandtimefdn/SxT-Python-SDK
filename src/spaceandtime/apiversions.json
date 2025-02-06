@@ -3,6 +3,7 @@
     "auth/refresh":       "v1",
     "auth/logout":        "v1",
     "auth/code":          "v1",
+    "auth/code-register": "v1",
     "auth/validtoken":    "v1",
     "auth/idexists/{id}": "v1",
     "auth/keys/code":     "v1",
