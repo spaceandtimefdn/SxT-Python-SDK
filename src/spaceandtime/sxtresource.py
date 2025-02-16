@@ -1,12 +1,16 @@
-import logging, json, math, time, os
+import logging, json, math, time, os, sys
 from pysteve import pySteve
 from pathlib import Path
 from datetime import datetime
-from .sxtenums import SXTResourceType, SXTPermission, SXTKeyEncodings, SXTTableAccessType
-from .sxtexceptions import SxTArgumentError, SxTFileContentError, SxTExceptions
-from .sxtbiscuits import SXTBiscuit
-from .sxtkeymanager import SXTKeyManager
-from .sxtuser import SXTUser
+
+# done fighting with this, sorry
+sxtpypath = str(Path(__file__).parent.resolve())
+if sxtpypath not in sys.path: sys.path.append(sxtpypath)
+from sxtenums import SXTResourceType, SXTPermission, SXTKeyEncodings, SXTTableAccessType
+from sxtexceptions import SxTArgumentError, SxTFileContentError, SxTExceptions
+from sxtbiscuits import SXTBiscuit
+from sxtkeymanager import SXTKeyManager
+from sxtuser import SXTUser
 
 class SXTResource():
     # child objects should override: self.__with__, has_with_statement(), self.resource_type

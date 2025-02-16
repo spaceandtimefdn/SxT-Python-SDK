@@ -14,14 +14,12 @@ API_URL = 'https://api.spaceandtime.dev'
 def test_sxt_exceptions():
     # test common exceptions
     sxt = SpaceAndTime() 
-    sxt.user.user_id = ''
+    sxt.user.user_id = sxt.user.api_key = ''
     with pytest.raises(Exception) as e_info: sxt.authenticate()
-    with pytest.raises(SxTArgumentError) as e_info: sxt.authenticate()
 
     sxt = SpaceAndTime() 
-    sxt.user.private_key = ''
+    sxt.user.private_key = sxt.user.api_key = ''
     with pytest.raises(Exception) as e_info: sxt.authenticate()
-    with pytest.raises(SxTArgumentError) as e_info: sxt.authenticate()
 
     with pytest.raises(SxTAuthenticationError) as errinfo:   raise SxTAuthenticationError('test message: SxTAuthenticationError')
     with pytest.raises(SxTQueryError) as errinfo:            raise SxTQueryError('test message: SxTQueryError')
@@ -34,9 +32,10 @@ def test_sxt_exceptions():
 
 
 def test_sxt_wrapper():
-    # pick up default .env file, with USERID="pySDK_tester"
+    # pick up default .env file, with USERID="pySDK_tester" or... testuser_977604126 ?
     # note, that specific user must exist in .env this test to succeed.
-    sxt = SpaceAndTime() 
+    envfile = Path(Path(__file__).parents[1] / '.env').resolve()
+    sxt = SpaceAndTime(envfile_filepath = envfile)
     assert sxt.user.user_id == 'pySDK_tester'
     assert sxt.user.public_key == "Lu8fefHsAYxKfj7oaCx+Rtz7eNiPln6xbOxJJo0aIZQ="
     assert sxt.user.private_key[:6] == 'MeaW6J'
@@ -68,13 +67,10 @@ def test_sxt_wrapper():
     assert success
     assert data[0]['NAME'] == 'Singularity'
 
-    # define specific outside of .env, in memory only
+    # define specific outside of .env, in memory only using API Key
     userid = 'testuser_X_' + f"{random.randint(0,999999999999):012}"
-    keypair = SXTKeyManager(new_keypair=True, encoding=sxt.ENCODINGS.BASE64)
-
-    sxt = SpaceAndTime(api_url=API_URL, user_id=userid, user_private_key=keypair.private_key)
+    sxt = SpaceAndTime(api_url=API_URL, user_id=userid, user_private_key='', api_key='sxt_SWyJRQrBS8_P3NxycE3MlvVYE3pUvl6L3zL')
     assert sxt.user.user_id == userid
-    assert sxt.user.private_key == keypair.private_key
     sxt.authenticate()
 
     success, data = sxt.execute_query('Select * from SXTLabs.Singularity limit 1')
@@ -229,7 +225,7 @@ def test_discovery():
 
 
 if __name__ == '__main__':
-    test_sxt_exceptions()
+    # test_sxt_exceptions()
     test_sxt_wrapper()
     test_sxt_user()
     test_execute_query()

@@ -1,10 +1,14 @@
-import logging, json
+import logging, json, sys
 from pathlib import Path
 from datetime import datetime
 from biscuit_auth import KeyPair, PrivateKey, PublicKey, Authorizer, Biscuit, BiscuitBuilder, BlockBuilder, Rule, DataLogError
-from .sxtexceptions import SxTArgumentError, SxTFileContentError, SxTBiscuitError, SxTKeyEncodingError
-from .sxtenums import SXTPermission, SXTKeyEncodings
-from .sxtkeymanager import SXTKeyManager
+
+# done fighting with this, sorry
+sxtpypath = str(Path(__file__).parent.resolve())
+if sxtpypath not in sys.path: sys.path.append(sxtpypath)
+from sxtexceptions import SxTArgumentError, SxTFileContentError, SxTBiscuitError, SxTKeyEncodingError
+from sxtenums import SXTPermission, SXTKeyEncodings
+from sxtkeymanager import SXTKeyManager
 
 
 

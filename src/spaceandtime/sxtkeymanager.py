@@ -1,9 +1,12 @@
-import logging, base64
+import logging, base64, sys, nacl.signing
 from pathlib import Path 
-import nacl.signing
 from biscuit_auth import KeyPair, PrivateKey 
-from .sxtexceptions import SxTKeyEncodingError
-from .sxtenums import SXTKeyEncodings
+
+# done fighting with this, sorry
+sxtpypath = str(Path(__file__).parent.resolve())
+if sxtpypath not in sys.path: sys.path.append(sxtpypath)
+from sxtexceptions import SxTKeyEncodingError
+from sxtenums import SXTKeyEncodings
 
 
 

@@ -1,9 +1,13 @@
-import os, logging, datetime, random
+import os, logging, datetime, random, sys
 from pathlib import Path
 from dotenv import load_dotenv
-from .sxtexceptions import SxTAuthenticationError, SxTArgumentError
-from .sxtkeymanager import SXTKeyManager, SXTKeyEncodings
-from .sxtbaseapi import SXTBaseAPI, SXTApiCallTypes 
+
+# done fighting with this, sorry
+sxtpypath = str(Path(__file__).parent.resolve())
+if sxtpypath not in sys.path: sys.path.append(sxtpypath)
+from sxtexceptions import SxTAuthenticationError, SxTArgumentError
+from sxtkeymanager import SXTKeyManager, SXTKeyEncodings
+from sxtbaseapi import SXTBaseAPI, SXTApiCallTypes 
 
 
 class SXTUser():
@@ -18,10 +22,12 @@ class SXTUser():
     refresh_token: str = ''
     access_token_expire_epoch: int = 0
     refresh_token_expire_epoch: int = 0
+    api_key:str = ''
     auto_reauthenticate:bool = False 
     start_time:datetime.datetime = None
     __bs: list = None
     __usrtyp__:list = None
+    __usrinfo__:dict = {}
 
     def __init__(self, dotenv_file:Path = None, user_id:str = None, 
                  user_private_key:str = None, api_url:str = None,
@@ -29,6 +35,7 @@ class SXTUser():
                  application_name:str = None,
                  logger:logging.Logger = None, 
                  SpaceAndTime_parent:object = None,
+                 api_key:str = None, access_token:str = None,
                  **kwargs) -> None:
         
         # start with parent import
@@ -59,13 +66,14 @@ class SXTUser():
         if dotenv_file: self.load(dotenv_file)
 
         # overwrite userid, api_url, and private key (and public key, by extension), if supplied
-        if user_private_key: self.private_key = user_private_key
-        if user_id: self.user_id = user_id
-        if api_url: self.base_api.api_url = api_url
+        if user_private_key != None: self.private_key = user_private_key
+        if user_id != None: self.user_id = user_id
+        if api_url != None: self.base_api.api_url = api_url
+        if api_key != None: self.api_key = api_key
+        if access_token != None: self.access_token = access_token
 
-        # secret option: make a test user_id if requested:
-        if 'testuser' in kwargs: 
-            self.user_id = 'testuser_' + kwargs['testuser'] + '_' + f"{random.randint(0,999999999999):012}"
+        # get user info from the network and cache (sets __usrinfo__ if malformed) 
+        self.__usrinfo__ = self.get_user_network_info()
 
         self.logger.info(f'SXT User instantiated: {self.user_id}')
         if authenticate: self.authenticate()
@@ -141,34 +149,89 @@ class SXTUser():
         return True if str(response).lower() == 'true' else False
 
 
-    def __validtoken__(self, name:str) -> dict:      
-        if self.access_expired: return 'disconnected - authenticate to retrieve'
+    def get_user_network_info (self) -> dict:     
+        """
+        Returns the network information about the user, given the current access token.
+        """ 
+        # if info is malformed, reset
+        for itm in ['userId', 'subscriptionId', 'restricted', 'quotaExceeded', 'trial', 'last_sync', 'sync_staus']:
+            if itm not in self.__usrinfo__: 
+                self.__usrinfo__ = { 
+                    "userId": None,
+                    "subscriptionId": None,
+                    "restricted": None,
+                    "quotaExceeded": None,
+                    "trial": None,
+                    "last_sync": datetime.datetime.strptime('1970-01-01 00:00:00','%Y-%m-%d %H:%M:%S'),
+                    "sync_staus": None, 
+                    "connected_flag": False
+                    }
+                break
+
+        # if last_sync was less than 2 seconds ago, return existing data (aka caches 2 seconds)
+        if (self.__usrinfo__['last_sync'] + datetime.timedelta(seconds=2)) > datetime.datetime.now():
+            return self.__usrinfo__
+    
+        # if access token is expired, report as disconnected but change nothing
+        if  self.access_expired:  
+            self.__usrinfo__["sync_staus"] = 'disconnected - authenticate to retrieve'
+            self.__usrinfo__['connected_flag'] = False
+            return self.__usrinfo__
+        
+        # make a call to the network:
         success, response = self.base_api.auth_validtoken()
-        if success and name in response: return response[name]
-        else: return 'error - could not retrieve'  
+        if not success: 
+            self.__usrinfo__["sync_staus"] = 'disconnected - authenticate to retrieve'
+            self.__usrinfo__['connected_flag'] = False
+            return self.__usrinfo__
+                
+        # loop thru response, validate, and store
+        issue_found = False
+        for itm in ['userId', 'subscriptionId', 'restricted', 'quotaExceeded', 'trial']:
+            if itm in response: self.__usrinfo__[itm] = response[itm] 
+            else: 
+                f'{itm} not returned from API auth/validtoken'
+                self.__usrinfo__[itm] = None
+                issue_found = True
+        self.__usrinfo__['last_sync'] = datetime.datetime.now()
+        self.__usrinfo__['sync_staus'] = 'synced' if not issue_found else 'synced with issues - missing value from auth/validtoken API'
+        self.__usrinfo__['connected_flag'] = True
+        if issue_found: self.logger.error(self.__usrinfo__['sync_staus'])
+        
+        # set user_id if not set, but do not overwrite
+        if not self.user_id: self.user_id = self.__usrinfo__['userId']
+        return self.__usrinfo__
+    
 
     @property
     def subscription_id(self) -> str:
-        return self.__validtoken__('subscriptionId')
+        if self.__usrinfo__ == {}: self.get_user_network_info()
+        return self.__usrinfo__['subscriptionId']
     
     @property
     def is_trial(self) -> str:
-        return self.__validtoken__('trial')
+        if self.__usrinfo__ == {}: self.get_user_network_info()
+        return self.__usrinfo__['trial']
     
     @property
     def is_restricted(self) -> str:
-        return self.__validtoken__('restricted')
+        if self.__usrinfo__ == {}: self.get_user_network_info()
+        return self.__usrinfo__['restricted']
 
     @property
     def is_quota_exceeded(self) -> str:
-        return self.__validtoken__('quotaExceeded')
+        if self.__usrinfo__ == {}: self.get_user_network_info()
+        return self.__usrinfo__['quotaExceeded']
  
 
 
 
     def __str__(self):
-        flds = {fld: getattr(self, fld) for fld in ['api_url','user_id','exists','private_key','public_key','encoding', 'subscription_id', 'is_trial', 'is_restricted', 'is_quota_exceeded']}
-        flds['private_key'] = flds['private_key'][:6]+'...'
+        fldlist = ['api_url','user_id','exists','api_key','encoding','private_key','public_key']
+        if self.__usrinfo__ != {}: fldlist += ['subscription_id', 'is_trial', 'is_restricted', 'is_quota_exceeded'] 
+        flds = {fld: getattr(self, fld) for fld in fldlist}
+        flds['private_key'] = flds['private_key'][:6]+'...' if flds['private_key'] else ''
+        flds['api_key'] = flds['api_key'][:10]+'...' if flds['api_key'] else ''
         return '\n'.join( [ f'\t{n} = {v}' for n,v in flds.items() ] )
 
 
@@ -218,11 +281,18 @@ class SXTUser():
                 self.private_key = temp
                 break
 
+        # add user API Key from environment (including several options)
+        for user_privatekey_var in ['SXT_USER_API_KEY', 'SXT_USER_APIKEY', 'USER_API_KEY', 'USER_APIKEY']:
+            temp = os.getenv(user_privatekey_var)
+            if temp: 
+                self.api_key = temp
+                break
+
         # TODO: Right now, only ED25519 authentication is supported.  Add Eth wallet support, or other future schemes
         # self.key_scheme = os.getenv('USER_KEY_SCHEME')
         
         loc = str(dotenv_file) if dotenv_file and Path(dotenv_file).exists() else 'default .env location'
-        self.logger.info(f'dotenv loaded\n{ self }')
+        self.logger.info(f'dotenv loaded')
         return None
 
 
@@ -354,28 +424,36 @@ class SXTUser():
             bool: Success flag (True/False) indicating the call worked as expected.
             object: Access_Token if successful, otherwise an error object.
         """
-        if not (self.user_id and self.private_key):
-            raise SxTArgumentError('Must have valid UserID and Private Key to authenticate.', logger=self.logger)
-        
+        if not ((self.user_id and self.private_key) or self.api_key):
+            raise SxTArgumentError('Must have valid user_id and either api_key or private_key to authenticate.', logger=self.logger)
+        success = False
+
         try: 
-            success, response = self.base_api.get_auth_challenge_token(user_id = self.user_id)
-            if success:
-                challenge_token = response['authCode']
-                signed_challenge_token = self.key_manager.sign_message(challenge_token)
-                success, response = self.base_api.get_access_token(user_id = self.user_id, 
-                                                                   challange_token = challenge_token, 
-                                                                   signed_challange_token = signed_challenge_token,
-                                                                   public_key = self.public_key)
-            if success:
-                tokens = response
-            else: 
-                raise SxTAuthenticationError(str(response), logger=self.logger)
+            if self.private_key and self.user_id:
+                
+                success, response = self.base_api.get_auth_challenge_token(user_id = self.user_id)
+                if success:
+                    challenge_token = response['authCode']
+                    signed_challenge_token = self.key_manager.sign_message(challenge_token)
+                    success, response = self.base_api.get_access_token(user_id = self.user_id, 
+                                                                    challange_token = challenge_token, 
+                                                                    signed_challange_token = signed_challenge_token,
+                                                                    public_key = self.public_key)
+
+            if not success and self.api_key:
+                success, response = self.base_api.gateway_proxy_auth_apikey(self.api_key)
+
+            # either way, continue on processing tokens
+            if not success: raise SxTAuthenticationError(str(response), logger=self.logger)
+            
+            tokens = response
             if len( [v for v in tokens if v in ['accessToken','refreshToken','accessTokenExpires','refreshTokenExpires']] ) < 4:
                 raise SxTAuthenticationError('Authentication produced incorrect / incomplete output', logger=self.logger)
         except SxTAuthenticationError as ex:
             return False, [ex]
 
         self.__settokens__(tokens['accessToken'], tokens['refreshToken'], tokens['accessTokenExpires'], tokens['refreshTokenExpires'])
+        self.__usrinfo__ = self.get_user_network_info()
         return True, self.access_token 
 
 
@@ -583,17 +661,10 @@ if __name__ == '__main__':
 
     # PoSQL Query Test:
     import random
-    km = SXTKeyManager(private_key = 'teststeve+otJf4zVA8HlyvxH8xqAUOXzTcR1dWhsrk=')
-    km.encoding = km.ENCODINGS.BASE64
-    
-    user = SXTUser(user_id = f'teststeve_{random.randrange(0,100000000)}' )
-    user.key_manager = km
-    
-    sucsess, response = user.register_new_user(email=f'{user.user_id}@example.com')
-    sucsess, password = user.gateway_proxy_join()
-    sucsess, response = user.gateway_proxy_change_password(old_password=password, new_password='teststeve+ot')
-    password = response['password']
-    sucsess, response = user.gateway_proxy_login(password=password)
-    
- 
-    pass
+    sue = SXTUser(api_key='sxt_lH8DpdRU5Y_EjiI8H5AXGmtrsY7oi63l8GO', user_private_key='', authenticate=True)
+    print(sue.access_expired)
+    print(sue.subscription_id, sue.is_trial, sue.is_restricted, sue.is_quota_exceeded)
+    print(sue)
+    sql = 'Select 1 as A from SXTLabs.Singularity'
+    success, data = sue.execute_query(sql)
+    print(success, data)

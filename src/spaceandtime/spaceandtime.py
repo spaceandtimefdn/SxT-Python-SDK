@@ -1,13 +1,17 @@
-import logging, random, time, json
+import logging, random, sys, json
 import pandas as pd 
 from io import StringIO
 from datetime import datetime
 from pathlib import Path
-from .sxtuser import SXTUser
-from .sxtresource import SXTTable, SXTView
-from .sxtkeymanager import SXTKeyManager
-from .sxtenums import *
-from .sxtexceptions import *
+
+# done fighting with this, sorry
+sxtpypath = str(Path(__file__).parent.resolve())
+if sxtpypath not in sys.path: sys.path.append(sxtpypath)
+from sxtuser import SXTUser
+from sxtresource import SXTTable, SXTView
+from sxtkeymanager import SXTKeyManager
+from sxtenums import *
+from sxtexceptions import *
 
 class SpaceAndTime:
 
@@ -30,7 +34,8 @@ class SpaceAndTime:
                 user_id=None, user_private_key=None, 
                 default_local_folder:str = None,
                 application_name='SxT-SDK', 
-                logger: logging.Logger = None):
+                logger: logging.Logger = None,
+                api_key:str = None):
         """Create new instance of Space and Time SDK for Python"""
         if logger: 
             self.logger = logger 
@@ -50,7 +55,7 @@ class SpaceAndTime:
         self.default_local_folder = default_local_folder if default_local_folder else Path('.').resolve()
         self.envfile_filepath = envfile_filepath if envfile_filepath else self.default_local_folder
 
-        self.user = SXTUser(dotenv_file=envfile_filepath, api_url=api_url, user_id=user_id, user_private_key=user_private_key, logger=self.logger)
+        self.user = SXTUser(dotenv_file=envfile_filepath, api_url=api_url, user_id=user_id, user_private_key=user_private_key, logger=self.logger, api_key=api_key)
         self.key_manager = self.user.key_manager
         return None 
     
@@ -62,6 +67,13 @@ class SpaceAndTime:
     def refresh_token(self) -> str:
         return self.user.refresh_token
     
+    @property
+    def api_key(self) -> str:
+        return self.user.api_key
+    @api_key.setter
+    def api_key(self, value:str):
+        self.user.api_key = value
+
     def logger_addFileHandler(self, file:Path) -> None:
         """Adds a logging file (handler) location to the default logging object, creating any needed folders and replacing {datetime}, {date}, or {time} with sxt start_time."""
         file = Path( self.__replaceall(str(file.resolve()), replacemap={}) )

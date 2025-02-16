@@ -6,6 +6,11 @@ sys.path.append(str( Path(Path(__file__).parents[1] / 'src').resolve() ))
 from spaceandtime.spaceandtime import SXTUser
 
 
+# with recent changes to user / subscription management, these tests are now defunct.
+# basically, users cannot be generated without a valid email, making it much harder to test. 
+# I'll leave this code here for now, as it's a useful reference, but it's no longer used.
+
+
 def test_remove_all_users_from_test_subscription():
     # login with admin
     admin = SXTUser(dotenv_file='.env_loader_admin')
@@ -26,7 +31,8 @@ def test_remove_all_users_from_test_subscription():
     assert len(users) == 1
 
 
-def test_adding_users_to_subscription():
+def defunct_adding_users_to_subscription():
+    # this test is now defunct, with recent changes to adding / managing users and subscriptiions
     # login with admin 
     steve = SXTUser(dotenv_file='.env_loader_admin')
     steve.authenticate()
@@ -62,5 +68,5 @@ def test_adding_users_to_subscription():
 
 if __name__ == '__main__':
     test_remove_all_users_from_test_subscription()
-    test_adding_users_to_subscription()
+    # test_adding_users_to_subscription()
     pass 

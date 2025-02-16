@@ -1,13 +1,20 @@
-import requests, logging, json
+import requests, logging, json, sys 
 from pathlib import Path
-from .sxtenums import SXTApiCallTypes
-from .sxtexceptions import SxTArgumentError, SxTAPINotDefinedError
-from .sxtbiscuits import SXTBiscuit
+
+# done fighting with this, sorry
+sxtpypath = str(Path(__file__).parent.resolve())
+if sxtpypath not in sys.path: sys.path.append(sxtpypath) 
+from sxtenums import SXTApiCallTypes
+from sxtexceptions import SxTArgumentError, SxTAPINotDefinedError
+from sxtbiscuits import SXTBiscuit
 
 
 class SXTBaseAPI():
     __au__:str = None 
     access_token = ''
+    refresh_token = ''
+    access_token_expires = 0
+    refresh_token_expires = 0 
     logger: logging.Logger
     network_calls_enabled:bool = True
     standard_headers = {
@@ -33,7 +40,11 @@ class SXTBaseAPI():
             content = fh.read()
         self.versions = json.loads(content)
         
-
+    def __settokens__(self, accessToken:str, refreshToken:str, accessTokenExpires:int, refreshTokenExpires:int):
+        self.access_token = accessToken
+        self.refresh_token = refreshToken   
+        self.access_token_expires = accessTokenExpires
+        self.refresh_token_expires = refreshTokenExpires
 
     @property
     def api_url(self):
@@ -63,7 +74,7 @@ class SXTBaseAPI():
             return [] 
         elif type(biscuits) == str:
             return [biscuits]
-        elif type(biscuits) == SXTBiscuit:  
+        elif 'SXTBiscuit' in str(type(biscuits)):  
             return [biscuits.biscuit_token]
         elif type(biscuits) == list:
             rtn=[]
@@ -361,6 +372,41 @@ class SXTBaseAPI():
         return success, response
 
 
+    def gateway_proxy_auth_apikey(self, api_key:str) -> tuple[bool, object]:
+        """-------------------- 
+        Logs into the gateway proxy using an API Key and returns an access token.
+
+        Args: 
+            api_key (str): API Key
+
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            object: Response information from the Gateway Proxy, as list or dict(json). 
+        """     
+        endpoint = 'https://proxy.api.spaceandtime.dev/auth/apikey'
+        if not api_key: raise SxTArgumentError('api_key is required')
+        success, response = self.call_api(endpoint = endpoint, 
+                                          auth_header = False, 
+                                          header_parms = {"apikey": api_key},
+                                          endpoint_full_override_flag=True)
+        if success: 
+            self.__settokens__(response['accessToken'], response['refreshToken'], response['accessTokenExpires'], response['refreshTokenExpires'])
+        return success, response
+    
+
+    def auth_apikey(self, api_key:str) -> tuple[bool, object]:
+        """-------------------- 
+        Logs into the gateway proxy using an API Key and returns an access token. This is an alias for gateway_proxy_auth_apikey().
+
+        Args: 
+            api_key (str): API Key
+
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            object: Response information from the Gateway Proxy, as list or dict(json). 
+        """     
+        return self.gateway_proxy_auth_apikey(api_key)
+     
 
 
     def auth_code_register(self, user_id:str, email:str, joincode:str = None, prefix:str = None) -> tuple[bool, object]:
@@ -419,6 +465,8 @@ class SXTBaseAPI():
                      ,"key": public_key 
                      ,"scheme": scheme}
         success, rtn = self.call_api(endpoint='auth/token', auth_header=False, data_parms=dataparms)
+        if success:
+            self.__settokens__(rtn['accessToken'], rtn['refreshToken'], rtn['accessTokenExpires'], rtn['refreshTokenExpires'])
         return success, rtn if success else [rtn]
 
 
@@ -432,6 +480,8 @@ class SXTBaseAPI():
         """
         headers = { 'authorization': f'Bearer {refresh_token}' }
         success, rtn = self.call_api('auth/refresh', False, header_parms=headers)
+        if success:
+            self.__settokens__(rtn['accessToken'], rtn['refreshToken'], rtn['accessTokenExpires'], rtn['refreshTokenExpires'])
         return success, rtn if success else [rtn]
 
 
@@ -908,9 +958,14 @@ class SXTBaseAPI():
 
 if __name__ == '__main__':
 
-    token = 'eyJ0eXBlIjoiYWNjZXNzIiwia2lkIjoiZTUxNDVkYmQtZGNmYi00ZjI4LTg3NzItZjVmNjNlMzcwM2JlIiwiYWxnIjoiRVMyNTYifQ.eyJpYXQiOjE3Mzg3MTAxMDQsIm5iZiI6MTczODcxMDEwNCwiZXhwIjoxNzM4NzExNjA0LCJ0eXBlIjoiYWNjZXNzIiwidXNlciI6InN0ZXBoZW4iLCJzdWJzY3JpcHRpb24iOiIzMWNiMGI0Yi0xMjZlLTRlM2MtYTdhMS1lNWRmNDc4YTBjMDUiLCJzZXNzaW9uIjoiMjAwMTMzN2EyZDdmZmIxMGU1ZDJlM2Y1Iiwic3NuX2V4cCI6MTczODc5NjUwNDI3OSwiaXRlcmF0aW9uIjoiZWQ2MjhkYTU2NTVmZjQzZGU3OTMxODg1In0.NUkgbTcgUWLYJaJVoRrh_evNJlp0IiCYUGR3oV7_JILpg4g-UQO1ojsHutcGp5a72uBO5vHy75Nsq8s-VaEYgA'
-    api = SXTBaseAPI(token)
+    
+    api = SXTBaseAPI()
+    api.auth_apikey('sxt_lH8DpdRU5Y_EjiI8H5AXGmtrsY7oi63l8GO')
 
+    print(api.access_token)
+    print(api.refresh_token)
+    print(api.access_token_expires)
+    print(api.refresh_token_expires)
     success, response = api.auth_code_register(user_id = 'poopsylicious', joincode='', email = 's@a.com')
     
     success, response = api.subscription_set_name('SXT Labs')
