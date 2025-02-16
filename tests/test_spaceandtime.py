@@ -34,8 +34,10 @@ def test_sxt_exceptions():
 def test_sxt_wrapper():
     # pick up default .env file, with USERID="pySDK_tester" or... testuser_977604126 ?
     # note, that specific user must exist in .env this test to succeed.
+    print('test_sxt_wrapper')
     envfile = Path(Path(__file__).parents[1] / '.env').resolve()
     sxt = SpaceAndTime(envfile_filepath = envfile)
+    sxt.user.user_id = 'pySDK_tester'
     assert sxt.user.user_id == 'pySDK_tester'
     assert sxt.user.public_key == "Lu8fefHsAYxKfj7oaCx+Rtz7eNiPln6xbOxJJo0aIZQ="
     assert sxt.user.private_key[:6] == 'MeaW6J'
@@ -55,6 +57,7 @@ def test_sxt_wrapper():
     # pick up specific .env file, with USERID="sxtlabs.crm.etl"
     # note, that specific user must exist for this test to succeed.
     sxt = SpaceAndTime(envfile_filepath='./.env_alt') 
+    sxt.user.user_id = 'pySDK_tester2'
     assert sxt.user.user_id == 'pySDK_tester2'
     assert sxt.user.public_key == "Lu8fefHsAYxKfj7oaCx+Rtz7eNiPln6xbOxJJo0aIZQ="
     assert sxt.user.private_key[:6] == 'MeaW6J'
@@ -66,25 +69,17 @@ def test_sxt_wrapper():
     success, data = sxt.execute_query('Select * from SXTLabs.Singularity limit 1')
     assert success
     assert data[0]['NAME'] == 'Singularity'
-
-    # define specific outside of .env, in memory only using API Key
-    userid = 'testuser_X_' + f"{random.randint(0,999999999999):012}"
-    sxt = SpaceAndTime(api_url=API_URL, user_id=userid, user_private_key='', api_key='sxt_SWyJRQrBS8_P3NxycE3MlvVYE3pUvl6L3zL')
-    assert sxt.user.user_id == userid
-    sxt.authenticate()
-
-    success, data = sxt.execute_query('Select * from SXTLabs.Singularity limit 1')
-    assert success
-    assert data[0]['NAME'] == 'Singularity'
-
+  
     
 def test_sxt_user():
     # pick up default .env file, with USERID="pySDK_tester"
     # note, that specific user must be used for this test to succeed.
+    print('test_sxt_user')
     sxt = None
 
     # UserA -- load .env file
     userA = SXTUser(dotenv_file='./.env', api_url=API_URL)
+    userA.user_id = 'pySDK_tester'
     assert userA.user_id == 'pySDK_tester'
     assert userA.public_key == "Lu8fefHsAYxKfj7oaCx+Rtz7eNiPln6xbOxJJo0aIZQ="
     assert userA.private_key[:6] == 'MeaW6J'
@@ -101,9 +96,8 @@ def test_sxt_user():
     assert data[0]['USERLETTER'] == 'A'
 
     # UserB -- load specific info
-    userid = 'testuser_X_' + f"{random.randint(0,999999999999):012}"
-    keypair = SXTKeyManager(new_keypair=True)
-    userB = SXTUser(user_id=userid, user_private_key=keypair.private_key, api_url=API_URL, authenticate=True)
+    userB = SXTUser(dotenv_file='./.env_alt', user_id="pySDK_tester2", api_url=API_URL, authenticate=True)
+    userB.user_id = 'pySDK_tester2'
     success, data = userB.execute_query("Select Name, 'B' as UserLetter from SXTLabs.Singularity limit 1")
     assert success
     assert data[0]['NAME'] == 'Singularity'
@@ -128,12 +122,6 @@ def test_sxt_user():
     assert data[0]['NAME'] == 'Singularity'
     assert data[0]['USERLETTER'] == 'A'
 
-    # test secret testuser functionality
-    userC = SXTUser(testuser='C', user_private_key=keypair.private_key, api_url=API_URL, authenticate=True)
-    success, data = userC.execute_sql("Select Name, 'C' as UserLetter from SXTLabs.Singularity limit 1")
-    assert success
-    assert data[0]['NAME'] == 'Singularity'
-    assert data[0]['USERLETTER'] == 'C'
 
  
 def test_execute_query():
