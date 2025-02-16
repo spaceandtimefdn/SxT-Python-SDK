@@ -478,7 +478,7 @@ class SXTUser():
 
     def execute_sql(self, sql_text:str, biscuits:list = None, app_name:str = None):
         """
-        This is a duplicate of the "execute_query" method, provided for backwards compatibility.
+        **Deprecated** This is a duplicate of the "execute_query" method, provided for backwards compatibility.
         Use the more consistent "execute_query" to avoid future deprecation issues. 
         """
         self.logger.warning('execute_sql is deprecated. Use execute_query() instead.')
@@ -487,7 +487,7 @@ class SXTUser():
 
     def execute_query(self, sql_text:str, biscuits:list = None, app_name:str = None):
         """
-        Execute a SQL query, returning success flag and data.
+        Execute a SQL query, returning success flag and data. Can be DQL, DML, or DDL.
         
         Args:
             sql_text (str): SQL text to execute.

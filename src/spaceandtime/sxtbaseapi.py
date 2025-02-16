@@ -607,11 +607,7 @@ class SXTBaseAPI():
 
     def sql_ddl(self, sql_text:str, biscuits:list = None, app_name:str = None):
         """--------------------
-        Executes a database DDL statement, and returns status.
-
-        Calls and returns data from API: sql/ddl, which runs arbitrary DDL for creating resources.        
-        This will be slightly more performant than the generic sql_exec function, but requires a resource name.
-        Biscuits are always required for DDL.
+        **deprecated** -- now simply calls sql_exec. 
 
         Args: 
             sql_text (str): SQL query text to execute. Note, there is NO placeholder replacement.
@@ -622,28 +618,16 @@ class SXTBaseAPI():
             bool: Success flag (True/False) indicating the api call worked as expected.
             object: Response information from the Space and Time network, as list or dict(json). 
         """
-        headers = { 'originApp': app_name } if app_name else {}
-        sql_text = self.prep_sql(sql_text=sql_text)
-        biscuit_tokens = self.prep_biscuits(biscuits)
-        if biscuit_tokens==[]:  raise SxTArgumentError("sql_ddl requires 'biscuits', none were provided.", logger = self.logger)
-        dataparms = {"sqlText": sql_text
-                    ,"biscuits": biscuit_tokens }
-                    # ,"resources": [r for r in resources] }
-        success, rtn = self.call_api('sql/ddl', True, header_parms=headers, data_parms=dataparms)
-        return success, rtn if success else [rtn]
+        return self.sql_exec(sql_text=sql_text, biscuits=biscuits, app_name=app_name)
 
 
     def sql_dml(self, sql_text:str, resources:list, biscuits:list = None, app_name:str = None):
         """--------------------
-        Executes a database DML statement, and returns status.
-
-        Calls and returns data from API: sql/dml, which runs arbitrary DML for manipulating data. 
-        This will be slightly more performant than the generic sql_exec function, but requires a resource name.
-        Biscuits are required for any non-public-write tables.
+        **deprecated** -- now simply calls sql_exec. 
 
         Args: 
             sql_text (str): SQL query text to execute. Note, there is NO placeholder replacement.
-            resources (list): List of Resources ("schema.table_name") in the sql_text. 
+            resources (list): ** ignored / unneeded **
             biscuits (list): (optional) List of biscuit tokens for permissioned tables. If only querying public tables, this is not needed.
             app_name (str): (optional) Name that will appear in querylog, used for bucketing workload.
         
@@ -651,30 +635,16 @@ class SXTBaseAPI():
             bool: Success flag (True/False) indicating the api call worked as expected.
             object: Response information from the Space and Time network, as list or dict(json). 
         """
-        if type(resources) != list: resources = [resources]
-        headers = { 'originApp': app_name } if app_name else {}
-        sql_text = self.prep_sql(sql_text=sql_text)
-        biscuit_tokens = self.prep_biscuits(biscuits)
-        if type(biscuit_tokens) != list:  raise SxTArgumentError("sql_all requires parameter 'biscuits' to be a list of biscuit_tokens or SXTBiscuit objects.",  logger = self.logger)
-        headers = { 'originApp': app_name } if app_name else {}
-        dataparms = {"sqlText": sql_text
-                    ,"biscuits": biscuit_tokens
-                    ,"resources": [r for r in resources] }
-        success, rtn = self.call_api('sql/dml', True, header_parms=headers, data_parms=dataparms)
-        return success, rtn if success else [rtn]
+        return self.sql_exec(sql_text=sql_text, biscuits=biscuits, app_name=app_name)
 
 
     def sql_dql(self, sql_text:str, resources:list, biscuits:list = None, app_name:str = None):
         """--------------------
-        Executes a database DQL / SQL query, and returns a dataset as a list of dictionaries.
-
-        Calls and returns data from API: sql/dql, which runs arbitrary SELECT statements that return data.        
-        This will be slightly more performant than the generic sql_exec function, but requires a resource name.
-        Biscuits are required for any non-public tables.
+        **deprecated** -- now simply calls sql_exec. 
 
         Args: 
             sql_text (str): SQL query text to execute. Note, there is NO placeholder replacement.
-            resources (list): List of Resources ("schema.table_name") in the sql_text. 
+            resources (list): ** ignored / unneeded **
             biscuits (list): (optional) List of biscuit tokens for permissioned tables. If only querying public tables, this is not needed.
             app_name (str): (optional) Name that will appear in querylog, used for bucketing workload.
 
@@ -682,16 +652,8 @@ class SXTBaseAPI():
             bool: Success flag (True/False) indicating the api call worked as expected.
             object: Response information from the Space and Time network, as list or dict(json). 
         """
-        if type(resources) != list: resources = [resources]
-        headers = { 'originApp': app_name } if app_name else {}
-        sql_text = self.prep_sql(sql_text=sql_text)
-        biscuit_tokens = self.prep_biscuits(biscuits)
-        if type(biscuit_tokens) != list:  raise SxTArgumentError("sql_all requires parameter 'biscuits' to be a list of biscuit_tokens or SXTBiscuit objects.",  logger = self.logger)
-        dataparms = {"sqlText": sql_text
-                    ,"biscuits": biscuit_tokens
-                    ,"resources": [r for r in resources] }
-        success, rtn = self.call_api('sql/dql', True, header_parms=headers, data_parms=dataparms)
-        return success, rtn if success else [rtn]
+        return self.sql_exec(sql_text=sql_text, biscuits=biscuits, app_name=app_name)
+
 
     def sql_exec_tamperproof(self, sql_text:str, biscuits:list = None):
         """--------------------
