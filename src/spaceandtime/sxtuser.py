@@ -151,8 +151,10 @@ class SXTUser():
 
     def get_user_network_info (self) -> dict:     
         """
-        Returns the network information about the user, given the current access token.
+        Returns the network information about the user, given the current access token. Will cache results for 2 seconds, 
+        to reduce network calls for repetitive hits (like printing the user object).
         """ 
+        CACHE_SECONDS = 2
         # if info is malformed, reset
         for itm in ['userId', 'subscriptionId', 'restricted', 'quotaExceeded', 'trial', 'last_sync', 'sync_staus']:
             if itm not in self.__usrinfo__: 
@@ -166,16 +168,19 @@ class SXTUser():
                     "sync_staus": None, 
                     "connected_flag": False
                     }
+                self.logger.debug(f'get_user_network_info dictionary reset ({self.user_id})')
                 break
 
-        # if last_sync was less than 2 seconds ago, return existing data (aka caches 2 seconds)
-        if (self.__usrinfo__['last_sync'] + datetime.timedelta(seconds=2)) > datetime.datetime.now():
+        # if last_sync was less than CACHE_SECONDS ago, return existing data and don't repull 
+        if (self.__usrinfo__['last_sync'] + datetime.timedelta(seconds = CACHE_SECONDS )) > datetime.datetime.now():
+            self.logger.debug(f'get_user_network_info request satified by cache ({self.user_id})')
             return self.__usrinfo__
     
         # if access token is expired, report as disconnected but change nothing
         if  self.access_expired:  
             self.__usrinfo__["sync_staus"] = 'disconnected - authenticate to retrieve'
             self.__usrinfo__['connected_flag'] = False
+            self.logger.debug(f'get_user_network_info request aborted due to lack of access token ({self.user_id})')
             return self.__usrinfo__
         
         # make a call to the network:
@@ -183,6 +188,7 @@ class SXTUser():
         if not success: 
             self.__usrinfo__["sync_staus"] = 'disconnected - authenticate to retrieve'
             self.__usrinfo__['connected_flag'] = False
+            self.logger.error(f'get_user_network_info request failed due to API call failure ({self.user_id})')
             return self.__usrinfo__
                 
         # loop thru response, validate, and store
@@ -196,6 +202,7 @@ class SXTUser():
         self.__usrinfo__['last_sync'] = datetime.datetime.now()
         self.__usrinfo__['sync_staus'] = 'synced' if not issue_found else 'synced with issues - missing value from auth/validtoken API'
         self.__usrinfo__['connected_flag'] = True
+        self.logger.debug(f'get_user_network_info request complete and cache updated  ({self.user_id})')
         if issue_found: self.logger.error(self.__usrinfo__['sync_staus'])
         
         # set user_id if not set, but do not overwrite
@@ -205,22 +212,22 @@ class SXTUser():
 
     @property
     def subscription_id(self) -> str:
-        if self.__usrinfo__ == {}: self.get_user_network_info()
+        self.get_user_network_info() # has a 2sec cache, so print(user) will only call once
         return self.__usrinfo__['subscriptionId']
     
     @property
     def is_trial(self) -> str:
-        if self.__usrinfo__ == {}: self.get_user_network_info()
+        self.get_user_network_info() # has a 2sec cache, so print(user) will only call once
         return self.__usrinfo__['trial']
     
     @property
     def is_restricted(self) -> str:
-        if self.__usrinfo__ == {}: self.get_user_network_info()
+        self.get_user_network_info() # has a 2sec cache, so print(user) will only call once
         return self.__usrinfo__['restricted']
 
     @property
     def is_quota_exceeded(self) -> str:
-        if self.__usrinfo__ == {}: self.get_user_network_info()
+        self.get_user_network_info() # has a 2sec cache, so print(user) will only call once
         return self.__usrinfo__['quotaExceeded']
  
 
@@ -453,7 +460,7 @@ class SXTUser():
             return False, [ex]
 
         self.__settokens__(tokens['accessToken'], tokens['refreshToken'], tokens['accessTokenExpires'], tokens['refreshTokenExpires'])
-        self.__usrinfo__ = self.get_user_network_info()
+        if self.user_id =='': self.get_user_network_info() # will set user_id if missing
         return True, self.access_token 
 
 
@@ -654,17 +661,3 @@ class SXTUser():
         if self.access_expired: 
             return False, {"error":"disconnected - authenticate to join gateway proxy"}
         return self.base_api.gateway_proxy_add_existing_user(access_token)
-
-
-
-if __name__ == '__main__':
-
-    # PoSQL Query Test:
-    import random
-    sue = SXTUser(api_key='sxt_lH8DpdRU5Y_EjiI8H5AXGmtrsY7oi63l8GO', user_private_key='', authenticate=True)
-    print(sue.access_expired)
-    print(sue.subscription_id, sue.is_trial, sue.is_restricted, sue.is_quota_exceeded)
-    print(sue)
-    sql = 'Select 1 as A from SXTLabs.Singularity'
-    success, data = sue.execute_query(sql)
-    print(success, data)
