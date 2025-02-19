@@ -35,7 +35,8 @@ class SpaceAndTime:
                 default_local_folder:str = None,
                 application_name='SxT-SDK', 
                 logger: logging.Logger = None,
-                api_key:str = None):
+                api_key:str = None,
+                authenticate:bool = False):
         """Create new instance of Space and Time SDK for Python"""
         if logger: 
             self.logger = logger 
@@ -57,6 +58,8 @@ class SpaceAndTime:
 
         self.user = SXTUser(dotenv_file=envfile_filepath, api_url=api_url, user_id=user_id, user_private_key=user_private_key, logger=self.logger, api_key=api_key)
         self.key_manager = self.user.key_manager
+
+        if authenticate: self.authenticate()
         return None 
     
     @property
@@ -351,175 +354,3 @@ class SpaceAndTime:
         else:
             self.logger.warning('Supplied an unsupported return type, only [json, list, str] currently supported. Defaulting to dict.')
         return success, response
-
-        
-        
-
-
-    
-
-if __name__ == '__main__':
-    from pprint import pprint
-    def randpad(i=6): return str(random.randint(0,999999)).rjust(6,'0')
-
-    
-
-    if True:
-
-        # BASIC USAGE 
-        sxt = SpaceAndTime()
-        sxt.authenticate()
-
-        pprint( sxt.discovery_get_schemas(return_as=dict) )
-        pprint( sxt.discovery_get_tables(schema='SXTDemo', return_as=dict) )
-
-        success, rows = sxt.execute_query(
-            'select * from POLYGON.BLOCKS limit 5')
-        pprint( rows )
-
-
-        # bit more complicated:
-        success, rows = sxt.execute_query("""
-            SELECT 
-            substr(time_stamp,1,7) AS YrMth
-            ,count(*) AS block_count
-            FROM polygon.blocks 
-            GROUP BY YrMth
-            ORDER BY 1 desc """ )
-        pprint( sxt.json_to_csv(rows) )
-
-        print( sxt.user )
-        
-
-        # discovery calls provide network information
-        success, schemas = sxt.discovery_get_schemas()
-        pprint(f'There are {len(schemas)} schemas currently on the network.')
-        pprint(schemas)
-
-
-        for t in [list, json, str]:
-            success, tables = sxt.discovery_get_tables('SXTDEMO', return_as=t)
-            if success: pprint( tables )
-
-        # Create a table (with random name)
-        tableA = SXTTable(name = f"SXTTEMP.MyTestTable_{randpad()}", 
-                        new_keypair=True, default_user=sxt.user, logger=sxt.logger,
-                        access_type=SXTTableAccessType.PERMISSSIONED)
-        tableA.create_ddl = """
-        CREATE TABLE {table_name} 
-        ( MyID         int
-        , MyName       varchar
-        , MyDate       date
-        , Primary Key(MyID) 
-        ) {with_statement}
-        """ 
-        tableA.add_biscuit('read',  tableA.PERMISSION.SELECT )
-        tableA.add_biscuit('write', tableA.PERMISSION.SELECT, tableA.PERMISSION.INSERT, 
-                                    tableA.PERMISSION.UPDATE, tableA.PERMISSION.DELETE,
-                                    tableA.PERMISSION.MERGE )
-        tableA.add_biscuit('admin', tableA.PERMISSION.ALL )
-        
-        tableA.save() # <-- Important!  Don't lose your keys, or you lose control of your table
-        success, results = tableA.create()
-
-        if success:  # load some records
-
-            # generate some dummy data
-            cols = ['MyID','MyName','MyDate']
-            data = [[i, chr(64+i), f'2023-09-0{i}'] for i in list(range(1,10))]
-
-            # insert 
-            tableA.insert(columns=cols, data=data)
-
-            # select rows, just for fun
-            success, rows = tableA.select()
-            pprint( rows )
-
-            success, results = tableA.delete(where='MyID=6')
-
-            # should be one less than last time
-            success, rows = tableA.select()
-            pprint( rows )
-            
-
-
-        # emulate starting over, loading from save file
-        user_selection = tableA.recommended_filename
-        tableA = None
-        sxt = None 
-
-        # reload from save file:
-        sxt = SpaceAndTime()
-        sxt.authenticate()
-
-        tableA = SXTTable(from_file = user_selection, default_user=sxt.user)
-        pprint( tableA )
-        pprint( tableA.select() )
-
-
-        # create a view 
-        viewB = SXTView('SXTTEMP.MyTest_Odds', default_user=tableA.user, 
-                        private_key=tableA.private_key, logger=tableA.logger)
-        viewB.add_biscuit('read', viewB.PERMISSION.SELECT)
-        viewB.add_biscuit('admin', viewB.PERMISSION.ALL) 
-        viewB.table_biscuit = tableA.get_biscuit('admin')
-        viewB.create_ddl = """
-            CREATE VIEW {view_name} 
-            {with_statement} 
-            AS
-            SELECT *
-            FROM """ + tableA.table_name + """
-            WHERE MyID in (1,3,5,7,9) """
-        
-        viewB.save() # <-- Important! don't lose keys!
-        viewB.create()
-
-        # the view will be created immediately, but there may be a small delay in seeing data
-        # until end of 2023.
-        
-        input("""
-            Now is your time to pause and play around... 
-            after pressing enter, the script will drop objects 
-            in order to clean up.
-              
-            Note, if you wait too long (>25min) the access_token will time-out
-            and you'll need to tableA.user.authenticate() again. 
-              """)
-
-        viewB.drop()
-        tableA.drop()
-
-    print( tableA.recommended_filename )
-    print( viewB.recommended_filename )
-    print( sxt.user.recommended_filename )
-
-    # Multiple Users, Multiple Tables
-    suzy = SXTUser('.env', authenticate=True)
-
-    bill = SXTUser()
-    bill.load('.env')
-    bill.authenticate()
-
-    print('\nDifferent Logins? ', suzy.access_token != bill.access_token)
-
-    # new user
-    pat = SXTUser(user_id=f'pat_{randpad()}')
-    pat.new_keypair()
-    pat.api_url = suzy.api_url
-    pat.save() # <-- Important! don't lose keys!
-    pat.authenticate()
-
-    # suzy to invite pat:
-    if suzy.user_type in ['owner','admin']: 
-        joincode = suzy.generate_joincode()
-        success, results = pat.join_subscription(joincode=joincode)
-        pprint( results )
-
-
-    # emulate starting over
-    pats_file = pat.recommended_filename
-    pat = SXTUser(dotenv_file=pats_file)
-    pat.authenticate()
-
-    pass 
-    
