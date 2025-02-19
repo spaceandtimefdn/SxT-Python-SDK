@@ -214,15 +214,19 @@ class SXTBaseAPI():
                 msg = f'request_type must be of type SXTApiCallTypes, not { type(request_type) }'
                 raise SxTArgumentError(msg, logger=self.logger)
             
-            match request_type:
-                case SXTApiCallTypes.POST   : callfunc = requests.post
-                case SXTApiCallTypes.GET    : callfunc = requests.get
-                case SXTApiCallTypes.PUT    : callfunc = requests.put
-                case SXTApiCallTypes.DELETE : callfunc = requests.delete
-                case _: raise SxTArgumentError('Call type must be SXTApiCallTypes enum.', logger=self.logger)
-
             # Call API function as defined above
-            response = callfunc(url=url, data=json.dumps(data_parms), headers=headers)
+            from pprint import pprint
+            self.logger.debug(f'\nNew API call for endpoint: {url}')
+            self.logger.debug('  headers:')
+            self.logger.debug( headers if self.access_token=='' else str(headers).replace(self.access_token,'<<access_token>>') )
+            self.logger.debug('  data parms:')
+            self.logger.debug( data_parms if self.access_token=='' else str(data_parms).replace(self.access_token,'<<access_token>>') )
+            match request_type:
+                case SXTApiCallTypes.POST   : response = requests.post(url=url, data=json.dumps(data_parms), headers=headers)
+                case SXTApiCallTypes.GET    : response = requests.get(url=url, data=json.dumps(data_parms), headers=headers)
+                case SXTApiCallTypes.PUT    : response = requests.put(url=url, data=json.dumps(data_parms), headers=headers)
+                case SXTApiCallTypes.DELETE : response = requests.delete(url=url, data=json.dumps(data_parms), headers=headers)
+
             txt = response.text
             statuscode = response.status_code
             response.raise_for_status()
@@ -708,12 +712,27 @@ class SXTBaseAPI():
             bool: Success flag (True/False) indicating the api call worked as expected.
             object: Response information from the Space and Time network, as list of dict. 
         """
+        allowed_scope = ['subscription', 'public', 'all']
+        if scope.lower() not in allowed_scope:
+            raise SxTArgumentError(f"Invalid value for scope '{scope}'. Must be one of {allowed_scope}.", logger = self.logger)
         version = 'v2' if 'discover/table' not in list(self.versions.keys()) else self.versions['discover/table'] 
         schema_or_namespace = 'namespace' if version=='v1' else 'schema'
-        query_parms = {'scope':scope.upper(), schema_or_namespace:schema.upper()}
+        query_parms = {schema_or_namespace:schema.upper()}
         if version != 'v1' and search_pattern: query_parms['searchPattern'] = search_pattern
-        success, rtn = self.call_api('discover/table',True,  SXTApiCallTypes.GET, query_parms=query_parms)
-        return success, (rtn if success else [rtn]) 
+        
+        all_tables = []
+        success = True
+        for current_scope in ['subscription', 'public']:
+            if scope.lower() in [current_scope, 'all']:
+                query_parms['scope'] = current_scope    
+                partial_success, rtn = self.call_api('discover/table',True,  SXTApiCallTypes.GET, query_parms=query_parms)
+                if not partial_success: success = False
+                if all_tables == []: # dedup a list of dicts, based on the table name
+                    all_tables = rtn
+                else: 
+                    for r in rtn: 
+                        if r['table'] not in [r['table'] for r in all_tables]: all_tables.append(r)
+        return success, (all_tables if success else [all_tables]) 
 
 
     def discovery_get_views(self, schema:str = 'ETHEREUM', scope:str = 'ALL', search_pattern:str = None):
@@ -917,27 +936,4 @@ class SXTBaseAPI():
         return success, rtn
         
 
-
-if __name__ == '__main__':
-
-    
-    api = SXTBaseAPI()
-    api.auth_apikey('sxt_lH8DpdRU5Y_EjiI8H5AXGmtrsY7oi63l8GO')
-
-    print(api.access_token)
-    print(api.refresh_token)
-    print(api.access_token_expires)
-    print(api.refresh_token_expires)
-    success, response = api.auth_code_register(user_id = 'poopsylicious', joincode='', email = 's@a.com')
-    
-    success, response = api.subscription_set_name('SXT Labs')
-
-    print( api.subscription_get_info() )
-    success, users = api.subscription_get_users() 
-
-    success, response = api.subscription_invite_user(role='member')
-    joincode = response['text']
-
-    print( api.subscription_join(joincode=joincode) )
-
-    pass 
+ 
