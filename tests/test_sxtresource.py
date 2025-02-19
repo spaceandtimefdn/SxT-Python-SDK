@@ -145,6 +145,14 @@ def test_inserts_deletes_updates():
     assert success
     assert results == [{'UPDATED': 0}]
 
+    success, results = tbl.delete(where = '1=1') # empty table
+    assert success
+    success, results = tbl.insert.list_of_dicts_batch(data_in)
+    assert success
+    success, results = tbl.select(f'select count(*) from {tbl.table_name}')
+    assert success
+    assert results == [{'COUNT': 4}]
+
     if tbl.exists:  
         success, result = tbl.drop()
         assert success
@@ -153,7 +161,7 @@ def test_inserts_deletes_updates():
 
 
 if __name__ == '__main__':
-    test_resource_save_load_bug()
-    test_resource_methods()
-    test_inserts_deletes_updates()
+    # test_resource_save_load_bug()
+    # test_resource_methods()
+    # test_inserts_deletes_updates()
     pass 

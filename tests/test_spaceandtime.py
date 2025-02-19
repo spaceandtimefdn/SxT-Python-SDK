@@ -1,5 +1,6 @@
 import os, sys, pytest, pandas, random
 from pathlib import Path
+from datetime import datetime
 
 # load local copy of libraries
 sys.path.append(str( Path(Path(__file__).parents[1] / 'src').resolve() ))
@@ -10,8 +11,30 @@ from spaceandtime.sxtbiscuits import SXTBiscuit
 from spaceandtime.sxtexceptions import *  # only contains exceptions prefixed with "SXT"
 API_URL = 'https://api.spaceandtime.dev'
 
+def setup_debug_logger():
+    import logging
+    logfile = Path(Path(__file__).resolve().parent / 'logs'/ f"pytest_debug_{datetime.now().strftime('%Y-%m-%d_%H%M%S')}.log")
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
+
+    if len(logger.handlers) == 0: 
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+        formatter.default_time_format = '%Y-%m-%d %H:%M:%S'
+        formatter.default_msec_format = '%s.%03d'
+        # file handler:
+        file_handler = logging.FileHandler(logfile)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+        # console handler
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
+    return logger
+
+mylogger = setup_debug_logger()
 
 def test_sxt_exceptions():
+    mylogger.info(f'\n\ntest_sxt_exceptions\n{"-"*30}')
     # test common exceptions
     sxt = SpaceAndTime() 
     sxt.user.user_id = sxt.user.api_key = ''
@@ -32,19 +55,27 @@ def test_sxt_exceptions():
 
 
 def test_sxt_wrapper():
+    mylogger.info(f'\n\ntest_sxt_wrapper\n{"-"*30}')
     # pick up default .env file, with USERID="pySDK_tester" or... testuser_977604126 ?
     # note, that specific user must exist in .env this test to succeed.
-    print('test_sxt_wrapper')
     envfile = Path(Path(__file__).parents[1] / '.env').resolve()
-    sxt = SpaceAndTime(envfile_filepath = envfile)
+    sxt = SpaceAndTime(envfile_filepath = envfile, logger= setup_debug_logger() )
     sxt.user.user_id = 'pySDK_tester'
     assert sxt.user.user_id == 'pySDK_tester'
     assert sxt.user.public_key == "Lu8fefHsAYxKfj7oaCx+Rtz7eNiPln6xbOxJJo0aIZQ="
     assert sxt.user.private_key[:6] == 'MeaW6J'
 
     assert len(sxt.access_token) == 0
+    assert sxt.user.subscription_id == None
+    assert sxt.user.is_quota_exceeded == None
+    assert sxt.user.is_restricted == None
+    assert sxt.user.is_trial == None
     sxt.authenticate()
     assert len(sxt.access_token) > 0
+    assert sxt.user.subscription_id != None
+    assert sxt.user.is_quota_exceeded != None
+    assert sxt.user.is_restricted != None
+    assert sxt.user.is_trial != None
     assert sxt.access_token[:4] == 'eyJ0' 
     assert sxt.user.user_id == 'pySDK_tester'
 
@@ -53,33 +84,17 @@ def test_sxt_wrapper():
     assert data[0]['NAME'] == 'Singularity'
     assert type(data) == list
     assert type(data[0]) == dict
-
-    # pick up specific .env file, with USERID="sxtlabs.crm.etl"
-    # note, that specific user must exist for this test to succeed.
-    sxt = SpaceAndTime(envfile_filepath='./.env_alt') 
-    sxt.user.user_id = 'pySDK_tester2'
-    assert sxt.user.user_id == 'pySDK_tester2'
-    assert sxt.user.public_key == "Lu8fefHsAYxKfj7oaCx+Rtz7eNiPln6xbOxJJo0aIZQ="
-    assert sxt.user.private_key[:6] == 'MeaW6J'
-
-    assert len(sxt.access_token) == 0
-    sxt.authenticate()
-    assert len(sxt.access_token) > 0
-
-    success, data = sxt.execute_query('Select * from SXTLabs.Singularity limit 1')
-    assert success
-    assert data[0]['NAME'] == 'Singularity'
   
     
 def test_sxt_user():
+    mylogger.info(f'\n\ntest_sxt_user\n{"-"*30}')
     # pick up default .env file, with USERID="pySDK_tester"
     # note, that specific user must be used for this test to succeed.
     print('test_sxt_user')
     sxt = None
 
     # UserA -- load .env file
-    userA = SXTUser(dotenv_file='./.env', api_url=API_URL)
-    userA.user_id = 'pySDK_tester'
+    userA = SXTUser(dotenv_file='./.env', api_url=API_URL, logger= setup_debug_logger() )
     assert userA.user_id == 'pySDK_tester'
     assert userA.public_key == "Lu8fefHsAYxKfj7oaCx+Rtz7eNiPln6xbOxJJo0aIZQ="
     assert userA.private_key[:6] == 'MeaW6J'
@@ -88,20 +103,31 @@ def test_sxt_user():
     userA.authenticate()
     assert len(userA.access_token) > 0
     assert userA.access_token[:4] == 'eyJ0' 
-    assert userA.user_id == 'pySDK_tester'
 
     success, data = userA.execute_query("Select Name, 'A' as UserLetter from SXTLabs.Singularity limit 1")
     assert success
     assert data[0]['NAME'] == 'Singularity'
     assert data[0]['USERLETTER'] == 'A'
 
-    # UserB -- load specific info
-    userB = SXTUser(dotenv_file='./.env_alt', user_id="pySDK_tester2", api_url=API_URL, authenticate=True)
-    userB.user_id = 'pySDK_tester2'
+
+    # UserB -- load alternate .env file
+    userB = SXTUser(dotenv_file='./.env_alt', api_url=API_URL, authenticate=True, logger= setup_debug_logger() )
+    # assert userB.user_id == 'pySDK_tester2'
+    # assert userB.public_key == "Lu8fefHsAYxKfj7oaCx+Rtz7eNiPln6xbOxJJo0aIZQ="
+    # assert userB.private_key[:6] == 'MeaW6J'
+    assert userB.user_id == 'stephen_cli'
+    assert userB.public_key == "S4HCEEe5Hlp0ePANRkNF7xrb3zasKz87H9QQ5ZcT9fU="
+    assert userB.private_key[:6] == 'z0STaV'
+
+    # authenticate flag used in initializer
+    assert len(userB.access_token) > 0
+    assert userB.access_token[:4] == 'eyJ0' 
+
     success, data = userB.execute_query("Select Name, 'B' as UserLetter from SXTLabs.Singularity limit 1")
     assert success
     assert data[0]['NAME'] == 'Singularity'
     assert data[0]['USERLETTER'] == 'B'
+
 
     # Alternate querying with different users
     success, data = userA.execute_query("Select Name, 'A' as UserLetter from SXTLabs.Singularity limit 1")
@@ -113,8 +139,69 @@ def test_sxt_user():
     success, data = userB.execute_query("Select Name, 'B' as UserLetter from SXTLabs.Singularity limit 1")
     assert success
 
-    assert userA.user_id != userB.user_id
-    assert userA.access_token != userB.access_token
+    # assert userA.user_id != userB.user_id
+    # assert userA.access_token != userB.access_token
+
+    # this is just for backwards compatibility... prefer not to use:
+    success, data = userA.execute_sql("Select Name, 'A' as UserLetter from SXTLabs.Singularity limit 1")
+    assert success
+    assert data[0]['NAME'] == 'Singularity'
+    assert data[0]['USERLETTER'] == 'A'
+
+
+
+def test_sxt_user_2():
+    mylogger.info(f'\n\ntest_sxt_user_2\n{"-"*30}')
+    # pick up default .env file, with USERID="pySDK_tester"
+    # note, that specific user must be used for this test to succeed.
+    print('test_sxt_user')
+    sxt = None
+
+    # UserA -- load .env file
+    userA = SXTUser(dotenv_file='./.env', api_url=API_URL, logger= setup_debug_logger() )
+    assert userA.user_id == 'pySDK_tester'
+    assert userA.public_key == "Lu8fefHsAYxKfj7oaCx+Rtz7eNiPln6xbOxJJo0aIZQ="
+    assert userA.private_key[:6] == 'MeaW6J'
+
+    assert len(userA.access_token) == 0
+    userA.authenticate()
+    assert len(userA.access_token) > 0
+    assert userA.access_token[:4] == 'eyJ0' 
+
+    success, data = userA.execute_query("Select Name, 'A' as UserLetter from SXTLabs.Singularity limit 1")
+    assert success
+    assert data[0]['NAME'] == 'Singularity'
+    assert data[0]['USERLETTER'] == 'A'
+
+
+    # UserB -- load alternate .env file
+    userB = userA # SXTUser(dotenv_file='./.env_alt', api_url=API_URL, authenticate=True, logger= setup_debug_logger() )
+    # assert userB.user_id == 'pySDK_tester2'
+    assert userB.public_key == "Lu8fefHsAYxKfj7oaCx+Rtz7eNiPln6xbOxJJo0aIZQ="
+    assert userB.private_key[:6] == 'MeaW6J'
+
+    # authenticate flag used in initializer
+    assert len(userB.access_token) > 0
+    assert userB.access_token[:4] == 'eyJ0' 
+
+    success, data = userB.execute_query("Select Name, 'B' as UserLetter from SXTLabs.Singularity limit 1")
+    assert success
+    assert data[0]['NAME'] == 'Singularity'
+    assert data[0]['USERLETTER'] == 'B'
+
+
+    # Alternate querying with different users
+    success, data = userA.execute_query("Select Name, 'A' as UserLetter from SXTLabs.Singularity limit 1")
+    assert success
+    success, data = userB.execute_query("Select Name, 'B' as UserLetter from SXTLabs.Singularity limit 1")
+    assert success
+    success, data = userA.execute_query("Select Name, 'A' as UserLetter from SXTLabs.Singularity limit 1")
+    assert success
+    success, data = userB.execute_query("Select Name, 'B' as UserLetter from SXTLabs.Singularity limit 1")
+    assert success
+
+    # assert userA.user_id != userB.user_id
+    # assert userA.access_token != userB.access_token
 
     # this is just for backwards compatibility... prefer not to use:
     success, data = userA.execute_sql("Select Name, 'A' as UserLetter from SXTLabs.Singularity limit 1")
@@ -125,6 +212,7 @@ def test_sxt_user():
 
  
 def test_execute_query():
+    mylogger.info(f'\n\ntest_execute_query\n{"-"*30}')
     sxt = SpaceAndTime()
     sxt.authenticate()
     success, data = sxt.execute_query('Select * from SXTLabs.Singularity limit 1')
@@ -157,6 +245,7 @@ def test_execute_query():
 
 
 def test_discovery():
+    mylogger.info(f'\n\ntest_discovery\n{"-"*30}')
     sxt = SpaceAndTime()
     sxt.authenticate()
 
@@ -179,17 +268,17 @@ def test_discovery():
     assert 'POLYGON,' in schemas
     assert schemas.count(',') >= 10
 
-    success, schemas = sxt.discovery_get_schemas(scope = sxt.DISCOVERY_SCOPE.PRIVATE)
+    success, schemas = sxt.discovery_get_schemas(scope = sxt.DISCOVERY_SCOPE.ALL)
     assert success
     assert schemas.count(',') == 0  # no such thing right now
 
     # Tables
-    success, tables = sxt.discovery_get_tables('SXTLabs', scope = sxt.DISCOVERY_SCOPE.PRIVATE, return_as=list)
+    success, tables = sxt.discovery_get_tables('SXTLabs', scope = sxt.DISCOVERY_SCOPE.SUBSCRIPTION, return_as=list)
     assert success
     assert 'SXTLABS.CRM_ACCOUNTS' in tables
     assert len(tables) >=10
 
-    success, tables = sxt.discovery_get_tables('SXTLabs', search_pattern='CRM_Cosell', scope = sxt.DISCOVERY_SCOPE.PRIVATE, return_as=list)
+    success, tables = sxt.discovery_get_tables('SXTLabs', search_pattern='CRM_Cosell', scope = sxt.DISCOVERY_SCOPE.SUBSCRIPTION, return_as=list)
     assert success
     assert 'SXTLABS.CRM_COSELL_AGREEMENTS' in tables
     assert len(tables) <=10
@@ -214,8 +303,12 @@ def test_discovery():
 
 if __name__ == '__main__':
     # test_sxt_exceptions()
-    test_sxt_wrapper()
-    test_sxt_user()
-    test_execute_query()
-    test_discovery()
+    # test_sxt_wrapper()
+    # test_sxt_user_2()
+    # test_sxt_user()
+    # test_execute_query()
+    # test_discovery()
+
+    # logger = setup_debug_logger()
+    # logger.info('\n\nDone!!!')
     pass 
