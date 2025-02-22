@@ -397,7 +397,9 @@ class SXTResource():
             self.logger.warning('No SXTUser objects were provided. Returning None, but this may cause downstream errors.')
             return None
         
-        all_valid_user_objects = [user for user in all_user_objects if len(user.user_id)>0 and len(user.private_key)>0]
+        all_valid_user_objects = [user for user in all_user_objects if 
+                                  (len(user.user_id)>0 and len(user.private_key)>0) 
+                                  or len(user.api_key)>0]
         if all_valid_user_objects == []:
             self.logger.warning('None of the supplied SXTUser objects appear capable of connecting to SXT Network. Returning the first, but this may cause downstream errors.')
             return all_user_objects[0]

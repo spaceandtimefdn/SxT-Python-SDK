@@ -37,17 +37,18 @@ def test_resource_save_load_bug():
 def test_resource_methods():
     keys = SXTKeyManager(new_keypair=True)
     rs = SXTResource('Test')
-    userA = SXTUser(testuser='A', user_private_key=keys.private_key)
-    userB = SXTUser(testuser='B', user_private_key=keys.private_key)
-    userE = SXTUser(testuser='E')
+    userA = SXTUser(user_id='A', user_private_key=keys.private_key, api_key='')
+    userB = SXTUser(user_id='B', user_private_key='', api_key='')
+    userE = SXTUser(user_id='E', api_key='')
     userE.key_manager = SXTKeyManager()
     userO = object()
     userS = 'just a string, man'
-    userRS = SXTUser(testuser='RS', user_private_key=keys.private_key)
+    userK = SXTUser(api_key='sxt_apikey123')
+    userRS = SXTUser(user_id='RS', user_private_key=keys.private_key)
     rs.user = userRS 
 
     assert rs.get_first_valid_user(userO, userS, userE, userA, userB) == userA
-    assert rs.get_first_valid_user(userS, userB, userA, userE) == userB
+    assert rs.get_first_valid_user(userS, userB, userA, userE) == userA
     assert rs.get_first_valid_user(userA, userB, userO, userS) == userA
     assert rs.get_first_valid_user(userS, userRS, userB, userA, userO) == userRS
     assert rs.get_first_valid_user() == userRS
@@ -160,7 +161,16 @@ def test_inserts_deletes_updates():
     pass
 
 
+def test_table_discovery():
+    sxt = SpaceAndTime()
+    sxt.authenticate()
+    tbl = SXTTable('Polygon.Blocks', SpaceAndTime_parent=sxt)
+
+    assert tbl.columns != {}
+ 
+
 if __name__ == '__main__':
+    # test_table_discovery()
     # test_resource_save_load_bug()
     # test_resource_methods()
     # test_inserts_deletes_updates()
