@@ -237,7 +237,7 @@ class SXTBaseAPI():
             except json.decoder.JSONDecodeError as ex:
                 rtn = {'text':txt, 'status_code':statuscode}
 
-            self.logger.debug(f'API call completed for endpoint: "{endpoint}" with result: {txt}')
+            self.logger.debug( f'API call completed for endpoint: "{endpoint}" with result: {txt[:2000]}')
             return True, rtn
 
         except requests.exceptions.RequestException as ex:
