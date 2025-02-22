@@ -79,7 +79,7 @@ class SpaceAndTime:
 
     def logger_addFileHandler(self, file:Path) -> None:
         """Adds a logging file (handler) location to the default logging object, creating any needed folders and replacing {datetime}, {date}, or {time} with sxt start_time."""
-        file = Path( self.__replaceall(str(file.resolve()), replacemap={}) )
+        file = Path( self.__replaceall(str(Path(file).resolve()), replacemap={}) )
         file.parent.mkdir(parents=True, exist_ok=True)
         fh = logging.FileHandler(file)
         fh.formatter = self.logger.sxtformat
