@@ -18,7 +18,7 @@ sxt.authenticate()
 
 
 # create a test table:
-myTable = SXTTable(f'TEMP.MyTable_{randnum}', access_type=sxt.TABLE_ACCESS.PERMISSSIONED, 
+myTable = SXTTable(f'TEMP.MyTable_{randnum}', access_type=sxt.TABLE_ACCESS.PERMISSIONED, 
                    new_keypair=True, SpaceAndTime_parent=sxt)
 myTable.create_ddl = """
        CREATE TABLE {table_name} 
@@ -88,7 +88,7 @@ if view_drop_success and table_drop_success:
 
 
 # What if you want to raise error on any failure, instead of testing for Success?
-errTable = SXTTable(f'TEMP.errTable_{randnum}', access_type=sxt.TABLE_ACCESS.PERMISSSIONED, 
+errTable = SXTTable(f'TEMP.errTable_{randnum}', access_type=sxt.TABLE_ACCESS.PERMISSIONED, 
                    new_keypair=True, SpaceAndTime_parent=sxt)
 errTable.create_ddl = """
        CREATE TABLE {table_name} 
