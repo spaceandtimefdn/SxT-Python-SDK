@@ -2,7 +2,7 @@ import os, sys, pytest, pandas, random
 from pathlib import Path
 
 # load local copy of libraries
-sys.path.append(str( Path(Path(__file__).parents[1] / 'src').resolve() ))
+sys.path.append(str( Path(__file__).resolve().parent.parent / 'src' ))
 from spaceandtime.spaceandtime import SpaceAndTime
 from spaceandtime.spaceandtime import SXTUser
 from spaceandtime.sxtkeymanager import SXTKeyManager
@@ -50,7 +50,7 @@ def test_sxt_wrapper():
     success, data = sxt.execute_query('Select * from SXTLabs.Singularity limit 1')
     assert success
     assert data[0]['NAME'] == 'Singularity'
-    assert type(data) == list
+    assert isinstance(data, list)
     assert type(data[0]) == dict
 
     # pick up specific .env file, with USERID="sxtlabs.crm.etl"
