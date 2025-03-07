@@ -966,8 +966,11 @@ class SXTTable(SXTResource):
             # ----
             # build all the insert batches first, so we don't start something we can't finish:
 
+            # change all data columns (not values) to lower case
+            list_of_dicts = [{str(n).lower():v for n,v in r.items()} for r in list_of_dicts]
+
             # determine the columns existing in the first row of data
-            datacols = [str(c).lower() for c in list(list_of_dicts[0].keys())]
+            datacols = list(list_of_dicts[0].keys())
 
             # pull the list of columns in the destination table:
             tblcols = [str(c).lower() for c in list(self.__rc__.columns.keys())]
