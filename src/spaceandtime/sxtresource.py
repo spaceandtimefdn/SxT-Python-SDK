@@ -966,11 +966,19 @@ class SXTTable(SXTResource):
             # ----
             # build all the insert batches first, so we don't start something we can't finish:
 
-            # determine the column order using the first row:
-            cols = list(list_of_dicts[0].keys())
+            # determine the columns existing in the first row of data
+            datacols = [str(c).lower() for c in list(list_of_dicts[0].keys())]
+
+            # pull the list of columns in the destination table:
+            tblcols = [str(c).lower() for c in list(self.__rc__.columns.keys())]
+
+            # get final list of columns based on the intersection of tblcols and datacols, ordered by datacols 
+            cols = [c for c in datacols if c in tblcols]
 
             # create list of rows, formatted, with consistent col order and ready for insert
-            list_of_rows = ([ f"({', '.join( [self.__rc__.safe_column_value( d[col] ) for col in cols] )})" for d in list_of_dicts])
+            safecol = self.__rc__.safe_column_value
+            list_of_rows = [ "(" + ",".join([safecol(r[c]) for c in cols]) + ")" for r in list_of_dicts]
+
             
             # create batches
             batches = []
