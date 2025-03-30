@@ -369,16 +369,20 @@ class SXTResource():
         Returns:
             list: List representation of the class.
         """
-        rtn = []
-        for n,v in self.to_dict(obscure_private_key=obscure_private_key, include_keys=include_keys).items():
-            if n=='biscuits':
-                for bname, token in dict(v).items():
-                    rtn.append(func_biscuit_formatter(bname, token))
-            elif 'ddl' in n or 'sql' in n:
-                rtn.append(func_sql_formatter(n,v))
-            else:
-                rtn.append(func_line_formatter(n,v))
-        return rtn
+        dict_items = self.to_dict(
+            obscure_private_key=obscure_private_key,
+            include_keys=include_keys
+        ).items()
+
+        return [
+            func_biscuit_formatter(bname, token)
+            if n == 'biscuits'
+            else func_sql_formatter(n, v)
+            if 'ddl' in n or 'sql' in n
+            else func_line_formatter(n, v)
+            for n, v in dict_items
+            for bname, token in ([('', '')] if n != 'biscuits' else dict(v).items())
+        ]
 
 
     def get_first_valid_user(self, *users) -> SXTUser:
@@ -778,23 +782,15 @@ class SXTTable(SXTResource):
         object type, this is technically not guaranteed.
         """
         rtn = {}
+        ddl = ' '.join(self.create_ddl.split())
+        columns_section = ddl[ddl.find('(')+1:ddl.rfind(')')].strip()
 
-        # prep ddl to isolate columns 
-        ddl = str(self.create_ddl).replace('\t',' ').replace('\n',' ').strip()
-        while '  ' in ddl: ddl = ddl.replace('  ',' ')
-        first_paren = ddl.find('(')+1
-        for i in range(len(ddl), 1, -1):
-            if ddl[i:i+1] == ')': 
-                last_paren = i 
-                break
-        
-        # process columns
-        cols = [c.strip() for c in ddl[first_paren:last_paren].split(',') ]
-        for col in cols:
-            if col.lower().startswith('primary key'): continue
-            colname = col.split(' ')[0]
-            coltype = col.split(' ')[1]
-            rtn[colname] = coltype
+        for col in (c.strip() for c in columns_section.split(',')):
+            if col.lower().startswith('primary key'):
+                continue
+        parts = col.split(maxsplit=2)
+        if len(parts) >= 2:
+            rtn[parts[0]] = parts[1]
 
         return rtn 
 

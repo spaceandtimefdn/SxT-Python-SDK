@@ -71,6 +71,26 @@ class SXTBaseAPI():
 
 
     def prep_sql(self, sql_text:str) -> str:
+    if not sql_text:
+        return ''
+
+    sql = ' '.join(sql_text.split())
+    parts = []
+    in_quotes = False
+    current = []
+
+    for char in sql:
+        if char == "'":
+            in_quotes = not in_quotes
+        if in_quotes:
+            current.append(char)
+        else:
+            if char != ';' or len(current) > 0:
+                current.append(char)
+
+    result = ''.join(current)
+    return result.strip()
+
         """-------------------
         Cleans and prepares sql_text for transmission and execution on-network.
 
