@@ -180,27 +180,33 @@ class SXTBiscuit():
         if not resource: resource = self.__lastresource
         if not resource: raise KeyError('must define a resource (schema.object) on which to assign permissions')
         self.__lastresource = resource
-        if resource not in self.__cap: self.__cap[resource] = []
+
+        self.__cap.setdefault(resource, [])
+
         if 'ALL' in self.__cap[resource] or '*' in self.__cap[resource]:
-            self.logger.warning('Cannot add other permissions to a biscuit containing ALL permissions.  Request disregarded.')
+            self.logger.warning('Cannot add other permissions to a biscuit containing ALL permissions. Request disregarded.')
             return self.__isall__(resource)
-        initial_count = len(self.__cap[resource])
-        process_count = 0
-        final_permissions = []
-        for permission in permissions: 
-            process_count += 1
-            if type(permission) == list: 
-                if 'ALL' in permission: return self.__isall__(resource)
-                final_permissions += list(permission)
-                process_count += len(list(permission))-1
+
+        current_perms = set(self.__cap[resource])
+        added_count = 0
+
+        for permission in permissions:
+            if isinstance(permission, list):
+                if 'ALL' in permission:
+                    return self.__isall__(resource)
+                new_perms = {p.value for p in permission if p.name != 'ALL'}
+                current_perms.update(new_perms)
+                added_count += len(new_perms)
             else:
-                if permission.name == 'ALL': return self.__isall__(resource)
-                final_permissions.append(permission)
-        self.__cap[resource] += [p.value for p in final_permissions]
-        self.__cap[resource] = list(set(self.__cap[resource]))
+                if permission.name == 'ALL':
+                    return self.__isall__(resource)
+                current_perms.add(permission.value)
+                added_count += 1
+
+        self.__cap[resource] = list(current_perms)
         self.__bt = ''
-        added_count = len(self.__cap[resource]) - initial_count
-        self.logger.info(f'Added {added_count} permissions, from total {process_count} submitted ({process_count - added_count} duplicates)')
+
+        self.logger.info(f'Added {added_count} unique permissions')
         return added_count
 
     def __isall__(self, resource):
