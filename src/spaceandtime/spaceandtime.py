@@ -276,13 +276,22 @@ class SpaceAndTime:
         if not user: user = self.user
         if not scope: scope = SXTDiscoveryScope.ALL
         success, response = user.base_api.discovery_get_schemas(scope=scope.name)  
-        if success:
-            if return_as in [list, str]: 
-                response = sorted([tbl['schema'] for tbl in response])
-                if return_as == str: response = ', '.join(response)
-            elif return_as in [json, dict]: pass # no change needed
-            else:
-                self.logger.warning('Supplied an unsupported return type, only [json, list, str] currently supported. Defaulting to dict.')
+        if not success: 
+            self.logger.warning("WARNING: base_api.discovery_get_schemas() failed to return Success")
+            return False, None
+
+        if return_as in [list, str]: 
+            response = sorted([s['schema'] for s in response])
+            if return_as == str: response = ', '.join(response)
+        else: 
+            # all other options are flavors of a dict:
+            response = {s['schema']:s for s in response}
+
+        # which flavor?
+        if   return_as in [json]: response = json.dumps(response, indent=4)
+        elif return_as in [dict, list, str]: pass # good as-is 
+        else:
+            self.logger.warning('Supplied an unsupported return type, only [json, dict, list, str] currently supported. Defaulting to dict.')
         return success, response
 
         
@@ -307,20 +316,30 @@ class SpaceAndTime:
         if not user: user = self.user
         if not scope: scope = SXTDiscoveryScope.ALL
         success, response = user.base_api.discovery_get_tables(scope=scope.name, schema=schema, search_pattern=search_pattern)  
-        if success:
-            if return_as in [list, str]: 
-                response = sorted([ f"{r['schema']}.{r['table']}" for r in response])
-                if return_as == str: response = ', '.join(response)
-            elif return_as in [dict,json]: response = {f"{r['schema']}.{r['table']}":r for r in response}
-            else:
-                self.logger.warning('Supplied an unsupported return type, only [json, dict, list, str] currently supported. Defaulting to dict.')
+        if not success: 
+            self.logger.warning("WARNING: base_api.discovery_get_tables() failed to return Success")
+            return False, None
+
+        if return_as in [list, str]: 
+            response = sorted([ f"{r['schema']}.{r['table']}" for r in response])
+            if return_as == str: response = ', '.join(response)
+        else: 
+            # all other options are flavors of a dict:
+            response = {f"{r['schema']}.{r['table']}":r for r in response}
+
+        # which flavor?
+        if   return_as in [json]: response = json.dumps(response, indent=4)
+        elif return_as in [dict, list, str]: pass # good as-is 
+        else:
+            self.logger.warning('Supplied an unsupported return type, only [json, dict, list, str] currently supported. Defaulting to dict.')
         return success, response
+
 
 
     def discovery_get_table_columns(self, schema:str, tablename:str, 
                              user:SXTUser = None, 
                              search_pattern:str = None, 
-                             return_as:type = json) -> tuple:
+                             return_as:type = dict) -> tuple:
         """--------------------
         Connects to the Space and Time network and returns all available columns within a table.
 
@@ -346,11 +365,56 @@ class SpaceAndTime:
         response = sorted(response, key=lambda d: d['position'])
 
         if return_as in [list, str]: 
-            response = sorted([ f"{r['column']}" for r in response])
+            response = ([ f"{r['column']}" for r in response])
             if return_as == str: response = ', '.join(response)
-        elif return_as == dict: 
+        else: 
+            # all other options are flavors of a dict:
             response = {r['column']:{n:v for n,v in r.items() if n!='column'} for r in response}
-        elif return_as == json: pass # return list_of_dicts 
+
+        # which flavor?
+        if   return_as in [json]: response = json.dumps(response, indent=4)
+        elif return_as in [dict, list, str]: pass # good as-is 
         else:
-            self.logger.warning('Supplied an unsupported return type, only [json, list, str] currently supported. Defaulting to dict.')
+            self.logger.warning('Supplied an unsupported return type, only [json, dict, list, str] currently supported. Defaulting to dict.')
+        return success, response
+
+
+        
+    def discovery_get_views(self, schema:str, 
+                             scope:SXTDiscoveryScope = SXTDiscoveryScope.ALL, 
+                             user:SXTUser = None, 
+                             search_pattern:str = None, 
+                             return_as:type = json) -> tuple:
+        """--------------------
+        Connects to the Space and Time network and returns all available views within a schema, along with view text and other metadata.
+
+        Args:
+            schema (str): Schema name to search for views.
+            scope (SXTDiscoveryScope): (optional) Scope of objects to return: All, Public, or Subscription. Defaults to SXTDiscoveryScope.ALL.
+            user (SXTUser): (optional) Authenticated User object. Uses default user if omitted.
+            search_pattern (str): (optional) Tablename pattern to match for inclusion into result set. Defaults to None / all tables.
+            return_as (type): (optional) Python type to return. Currently supports json, dict (unabridged), list, str (abridged). 
+
+        Returns: 
+            object: Return type defined with the return_as feature.
+        """        
+        if not user: user = self.user
+        if not scope: scope = SXTDiscoveryScope.ALL
+        success, response = user.base_api.discovery_get_views(schema=schema, scope=scope.name, search_pattern=search_pattern)  
+        if not success: 
+            self.logger.warning("WARNING: base_api.discovery_get_views() failed to return Success")
+            return False, None
+
+        if return_as in [list, str]: 
+            response = sorted([ f"{r['schema']}.{r['view']}" for r in response])
+            if return_as == str: response = ', '.join(response)
+        else:
+            # all other options are flavors of a dict:
+            response = {f"{r['schema']}.{r['view']}":r for r in response}
+
+        # which flavor?
+        if   return_as in [json]: response = json.dumps(response, indent=4)
+        elif return_as in [dict,list, str]: pass # good as-is
+        else:
+            self.logger.warning('Supplied an unsupported return type, only [json, dict, list, str] currently supported. Defaulting to dict.')
         return success, response

@@ -693,6 +693,9 @@ class SXTBaseAPI():
             bool: Success flag (True/False) indicating the api call worked as expected.
             object: Response information from the Space and Time network, as list of dict. 
         """
+        allowed_scope = ['subscription', 'public', 'all']
+        if scope.lower() not in allowed_scope:
+            raise SxTArgumentError(f"Invalid value for scope '{scope}'. Must be one of {allowed_scope}.", logger = self.logger)
         success, rtn = self.call_api('discover/schema',True, SXTApiCallTypes.GET, query_parms={'scope':scope})
         return success, (rtn if success else [rtn]) 
         
@@ -715,24 +718,14 @@ class SXTBaseAPI():
         allowed_scope = ['subscription', 'public', 'all']
         if scope.lower() not in allowed_scope:
             raise SxTArgumentError(f"Invalid value for scope '{scope}'. Must be one of {allowed_scope}.", logger = self.logger)
+        scope = 'PUBLIC' if scope.upper() == 'PUBLIC' else 'SUBSCRIPTION'
         version = 'v2' if 'discover/table' not in list(self.versions.keys()) else self.versions['discover/table'] 
         schema_or_namespace = 'namespace' if version=='v1' else 'schema'
-        query_parms = {schema_or_namespace:schema.upper()}
+        query_parms = {'scope':scope, schema_or_namespace:schema.upper()}
         if version != 'v1' and search_pattern: query_parms['searchPattern'] = search_pattern
         
-        all_tables = []
-        success = True
-        for current_scope in ['subscription', 'public']:
-            if scope.lower() in [current_scope, 'all']:
-                query_parms['scope'] = current_scope    
-                partial_success, rtn = self.call_api('discover/table',True,  SXTApiCallTypes.GET, query_parms=query_parms)
-                if not partial_success: success = False
-                if all_tables == []: # dedup a list of dicts, based on the table name
-                    all_tables = rtn
-                else: 
-                    for r in rtn: 
-                        if r['table'] not in [r['table'] for r in all_tables]: all_tables.append(r)
-        return success, (all_tables if success else [all_tables]) 
+        success, rtn = self.call_api('discover/table', True,  SXTApiCallTypes.GET, query_parms=query_parms)
+        return success, (rtn if success else [rtn]) 
 
 
     def discovery_get_views(self, schema:str = 'ETHEREUM', scope:str = 'ALL', search_pattern:str = None):
@@ -751,7 +744,8 @@ class SXTBaseAPI():
             object: Response information from the Space and Time network, as list of dict. 
         """
         version = 'v2' if 'discover/view' not in list(self.versions.keys()) else self.versions['discover/view'] 
-        query_parms = {'scope':scope.upper(), 'schema':schema.upper()}
+        scope = 'PUBLIC' if scope.upper() == 'PUBLIC' else 'SUBSCRIPTION'
+        query_parms = {'scope':scope, 'schema':schema.upper()}
         if version != 'v1' and search_pattern: query_parms['searchPattern'] = search_pattern
         success, rtn = self.call_api('discover/view',True,  SXTApiCallTypes.GET, query_parms=query_parms)
         return success, (rtn if success else [rtn]) 
