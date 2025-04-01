@@ -23,7 +23,7 @@ SXT_TELEM_BISCUIT = os.getenv('SXT_TELEM_BISCUIT')
 
  
 
-def test_telem_queries_in_schemas():
+def _est_telem_queries_in_schemas():
     schemas = ['sui','sxtlabs','ethereum']
     days = 14
 

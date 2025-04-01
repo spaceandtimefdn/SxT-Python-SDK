@@ -1,4 +1,4 @@
-import os, sys, pytest, pandas, random
+import os, sys, pytest, pandas, random, json
 from pathlib import Path
 from datetime import datetime
 
@@ -32,6 +32,20 @@ def setup_debug_logger():
     return logger
 
 mylogger = setup_debug_logger()
+
+def test_sxt_addfilehandler():
+    logfilepath =  Path(Path(__file__).parent / 'logs' / 'test_sxt_addfilehandler.log')
+    sxt = SpaceAndTime()
+
+    for test in [logfilepath, str(logfilepath)]:
+        logfilepath.unlink(missing_ok=True)
+        assert not logfilepath.exists()
+        sxt.logger_addFileHandler(test)
+        sxt.logger.info('test message')
+        assert logfilepath.exists()
+        sxt.logger.handlers.clear()
+
+
 
 def test_sxt_exceptions():
     mylogger.info(f'\n\ntest_sxt_exceptions\n{"-"*30}')
@@ -259,8 +273,7 @@ def test_discovery():
 
     success, schemas = sxt.discovery_get_schemas(return_as=dict)
     assert success
-    assert type(schemas) == list
-    assert type(schemas[0]) == dict
+    assert type(schemas) == dict
 
     success, schemas = sxt.discovery_get_schemas(return_as=str)
     assert success
@@ -268,9 +281,11 @@ def test_discovery():
     assert 'POLYGON,' in schemas
     assert schemas.count(',') >= 10
 
-    success, schemas = sxt.discovery_get_schemas(scope = sxt.DISCOVERY_SCOPE.ALL)
+    success, all_schemas = sxt.discovery_get_schemas(scope = sxt.DISCOVERY_SCOPE.ALL)
     assert success
-    assert schemas.count(',') == 0  # no such thing right now
+    success, sub_schemas = sxt.discovery_get_schemas(scope = sxt.DISCOVERY_SCOPE.SUBSCRIPTION)
+    assert success
+    assert len(all_schemas) > len(sub_schemas)
 
     # Tables
     success, tables = sxt.discovery_get_tables('SXTLabs', scope = sxt.DISCOVERY_SCOPE.SUBSCRIPTION, return_as=list)
@@ -294,14 +309,28 @@ def test_discovery():
     assert 'BLOCK_NUMBER' in columns.keys()
     assert len(columns) < 5
     
-    success, columns = sxt.discovery_get_table_columns('SXTLABS', 'CRM_ACCOUNTS') # defaults to json, aka list-of-dicts
+    success, columns = sxt.discovery_get_table_columns('SXTLABS', 'CRM_ACCOUNTS') # defaults to dict
     assert success
-    assert 'CREATED_TIME' in [c['column'] for c in columns]
-    assert 'ACCOUNT_NAME' in [c['column'] for c in columns]
+    assert 'CREATED_TIME' in columns.keys()
+    assert 'ACCOUNT_NAME' in columns.keys()
     assert len(columns) > 15
+
+    success, views = sxt.discovery_get_views('SXTLabs', scope = sxt.DISCOVERY_SCOPE.ALL, return_as=list)
+    assert success
+    assert len(views) > 0
+    assert type(views[0]) == str
+
+    success, views = sxt.discovery_get_views('SXTLabs', return_as=json)
+    assert success
+    assert len(views) > 0
+    assert type(views) == str
+    jsonreturn = json.loads(views)
+    assert type(jsonreturn) == dict
+    assert jsonreturn[list(jsonreturn.keys())[0]]['schema'].upper() == 'SXTLABS'
 
 
 if __name__ == '__main__':
+    # test_sxt_addfilehandler()
     # test_sxt_exceptions()
     # test_sxt_wrapper()
     # test_sxt_user_2()
