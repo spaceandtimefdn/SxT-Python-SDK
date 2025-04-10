@@ -261,7 +261,7 @@ class SpaceAndTime:
     
     def discovery_get_schemas(self, scope:SXTDiscoveryScope = SXTDiscoveryScope.ALL, 
                               user:SXTUser = None, 
-                              return_as:type = list) -> tuple:
+                              return_as:type = dict) -> tuple:
         """--------------------
         Connects to the Space and Time network and returns all available schemas.
 
@@ -299,7 +299,7 @@ class SpaceAndTime:
                              scope:SXTDiscoveryScope = SXTDiscoveryScope.ALL, 
                              user:SXTUser = None, 
                              search_pattern:str = None, 
-                             return_as:type = json) -> tuple:
+                             return_as:type = dict) -> tuple:
         """--------------------
         Connects to the Space and Time network and returns all available tables within a schema.
 
@@ -384,7 +384,7 @@ class SpaceAndTime:
                              scope:SXTDiscoveryScope = SXTDiscoveryScope.ALL, 
                              user:SXTUser = None, 
                              search_pattern:str = None, 
-                             return_as:type = json) -> tuple:
+                             return_as:type = dict) -> tuple:
         """--------------------
         Connects to the Space and Time network and returns all available views within a schema, along with view text and other metadata.
 
