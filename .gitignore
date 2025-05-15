@@ -18,6 +18,7 @@ venv_*
 tests/backup_biscuits/
 tests/latest_test_log.txt
 tests/user_saves
+load_IPwhitelist/
 
 
 # C extensions

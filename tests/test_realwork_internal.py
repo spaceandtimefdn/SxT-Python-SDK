@@ -23,7 +23,7 @@ SXT_TELEM_BISCUIT = os.getenv('SXT_TELEM_BISCUIT')
 
  
 
-def _est_telem_queries_in_schemas():
+def test_telem_queries_in_schemas():
     schemas = ['sui','sxtlabs','ethereum']
     days = 14
 
@@ -36,9 +36,10 @@ def _est_telem_queries_in_schemas():
     sxt.user.api_key = USER_API_KEY
     sxt.authenticate()
 
-    assert sxt.user.user_id == 'pySDK_tester'
     assert not sxt.user.access_expired
     assert sxt.user.exists
+    print(sxt.user.user_id)
+    assert sxt.user.user_id == 'pySDK_tester'
     assert not sxt.user.is_trial
     assert not sxt.user.is_quota_exceeded
     assert not sxt.user.is_restricted
@@ -84,5 +85,5 @@ def _est_telem_queries_in_schemas():
     
 
 if __name__ == "__main__":
-    # test_telem_queries_in_schemas()
+    test_telem_queries_in_schemas()
     pass

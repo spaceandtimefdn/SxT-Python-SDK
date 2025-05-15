@@ -10,7 +10,7 @@ from spaceandtime.sxtkeymanager import SXTKeyManager
 from spaceandtime.sxtresource import SXTResource, SXTTable
 from spaceandtime.sxtbiscuits import SXTBiscuit
 
-API_URL = 'https://api.spaceandtime.app'
+API_URL = 'https://api.makeinfinite.dev'
 
 
 def test_resource_save_load_bug():

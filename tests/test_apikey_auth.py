@@ -31,9 +31,10 @@ def test_apikey_login():
     sxt.user.api_key = USER_API_KEY
     sxt.authenticate()
     
-    assert sxt.user.user_id == 'pySDK_tester'
     assert not sxt.user.access_expired
     assert sxt.user.exists
+    print(sxt.user.user_id)
+    assert sxt.user.user_id == 'pySDK_tester'
     assert not sxt.user.is_trial
     assert not sxt.user.is_quota_exceeded
     assert not sxt.user.is_restricted

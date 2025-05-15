@@ -421,7 +421,6 @@ class SXTUser():
         return True, self.access_token 
 
 
-        return self.authenticate()
 
     def authenticate(self) -> tuple[bool, object]:
         """--------------------

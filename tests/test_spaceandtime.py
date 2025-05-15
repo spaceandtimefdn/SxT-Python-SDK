@@ -9,7 +9,7 @@ from spaceandtime.spaceandtime import SXTUser
 from spaceandtime.sxtkeymanager import SXTKeyManager
 from spaceandtime.sxtbiscuits import SXTBiscuit
 from spaceandtime.sxtexceptions import *  # only contains exceptions prefixed with "SXT"
-API_URL = 'https://api.spaceandtime.dev'
+API_URL = 'https://api.makeinfinite.dev'
 
 def setup_debug_logger():
     import logging

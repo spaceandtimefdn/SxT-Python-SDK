@@ -40,7 +40,7 @@ class SXTBaseAPI():
             content = fh.read()
         self.versions = json.loads(content)
         
-    def __settokens__(self, accessToken:str, refreshToken:str, accessTokenExpires:int, refreshTokenExpires:int):
+    def __settokens__(self, accessToken:str, accessTokenExpires:int, refreshToken:str='', refreshTokenExpires:int=0):
         self.access_token = accessToken
         self.refresh_token = refreshToken   
         self.access_token_expires = accessTokenExpires
@@ -48,7 +48,7 @@ class SXTBaseAPI():
 
     @property
     def api_url(self):
-        return self.__au__ if self.__au__ else 'https://api.spaceandtime.dev' # default 
+        return self.__au__ if self.__au__ else 'https://api.makeinfinite.dev' # default 
     @api_url.setter
     def api_url(self, value):
         self.__au__ = value
@@ -312,7 +312,7 @@ class SXTBaseAPI():
             bool: Success flag (True/False) indicating the api call worked as expected.
             dict: New Studio Password, or error message in a dict(json).
         """        
-        endpoint = f'https://proxy.api.spaceandtime.dev/auth/add-existing?accessToken={access_token}'
+        endpoint = f'https://proxy.api.makeinfinite.dev/auth/add-existing?accessToken={access_token}'
         success, response = self.call_api(endpoint = endpoint, 
                                           auth_header = False, 
                                           endpoint_full_override_flag=True)
@@ -334,7 +334,7 @@ class SXTBaseAPI():
             bool: Success flag (True/False) indicating the api call worked as expected.
             object: Response information from the Gateway Proxy, including the session id, access token, etc.
         """        
-        endpoint = 'https://proxy.api.spaceandtime.dev/auth/login'
+        endpoint = 'https://proxy.api.makeinfinite.dev/auth/login'
         success, response = self.call_api(endpoint = endpoint, 
                                           auth_header = False, 
                                           data_parms = {"userId": user_id, "password": password},
@@ -357,7 +357,7 @@ class SXTBaseAPI():
             bool: Success flag (True/False) indicating the api call worked as expected.
             object: Response information from the Gateway Proxy, as list or dict(json). 
         """        
-        endpoint = 'https://proxy.api.spaceandtime.dev/auth/reset'
+        endpoint = 'https://proxy.api.makeinfinite.dev/auth/reset'
         if not session_id:
             success, login_response = self.gateway_proxy_login(user_id, old_password)
             if not success: 
@@ -387,14 +387,15 @@ class SXTBaseAPI():
             bool: Success flag (True/False) indicating the api call worked as expected.
             object: Response information from the Gateway Proxy, as list or dict(json). 
         """     
-        endpoint = 'https://proxy.api.spaceandtime.dev/auth/apikey'
+        endpoint = 'https://proxy.api.makeinfinite.dev/auth/apikey'
         if not api_key: raise SxTArgumentError('api_key is required')
         success, response = self.call_api(endpoint = endpoint, 
                                           auth_header = False, 
                                           header_parms = {"apikey": api_key},
                                           endpoint_full_override_flag=True)
         if success: 
-            self.__settokens__(response['accessToken'], response['refreshToken'], response['accessTokenExpires'], response['refreshTokenExpires'])
+            response['refreshToken'] = response['refreshTokenExpires'] = ''
+            self.__settokens__(response['accessToken'], response['accessTokenExpires'])
         return success, response
     
 
@@ -470,7 +471,7 @@ class SXTBaseAPI():
                      ,"scheme": scheme}
         success, rtn = self.call_api(endpoint='auth/token', auth_header=False, data_parms=dataparms)
         if success:
-            self.__settokens__(rtn['accessToken'], rtn['refreshToken'], rtn['accessTokenExpires'], rtn['refreshTokenExpires'])
+            self.__settokens__(rtn['accessToken'], rtn['accessTokenExpires'], rtn['refreshToken'], rtn['refreshTokenExpires'])
         return success, rtn if success else [rtn]
 
 
@@ -485,7 +486,7 @@ class SXTBaseAPI():
         headers = { 'authorization': f'Bearer {refresh_token}' }
         success, rtn = self.call_api('auth/refresh', False, header_parms=headers)
         if success:
-            self.__settokens__(rtn['accessToken'], rtn['refreshToken'], rtn['accessTokenExpires'], rtn['refreshTokenExpires'])
+            self.__settokens__(rtn['accessToken'], rtn['accessTokenExpires'], rtn['refreshToken'], rtn['refreshTokenExpires'])
         return success, rtn if success else [rtn]
 
 
