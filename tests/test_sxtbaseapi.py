@@ -45,8 +45,7 @@ def test_peripheral_functions():
     assert 'select "some \tstring" as colA from schema.mytable' == sxtb.prep_sql(' select "some \tstring" as colA  \nfrom  schema.mytable; ')
 
 
-
-def est_authenticate():
+def test_authenticate():
     sxtb = SXTBaseAPI()
     keys.encoding = keys.ENCODINGS.BASE64
 
@@ -114,7 +113,6 @@ def test_call_api():
     assert 'JWT authorization failed' in data['text'] 
 
 
-
 def test_logout():
     sxtb = SXTBaseAPI(access_token)
     success, response = sxtb.auth_logout()
@@ -124,5 +122,9 @@ def test_logout():
 
 
 if __name__ == '__main__':
+    test_access_token_created()
+    test_peripheral_functions()
+    test_authenticate()
     test_call_api()
+    test_logout()
     pass 

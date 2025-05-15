@@ -69,7 +69,6 @@ class SXTResourceType(Enum):
     
 
 class SXTDiscoveryScope(Enum):
-    PRIVATE = 'private'
     SUBSCRIPTION = 'subscription'
     PUBLIC = 'public'
     ALL = 'all'

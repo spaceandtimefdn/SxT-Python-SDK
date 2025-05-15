@@ -1,13 +1,20 @@
-import requests, logging, json
+import requests, logging, json, sys 
 from pathlib import Path
-from .sxtenums import SXTApiCallTypes
-from .sxtexceptions import SxTArgumentError, SxTAPINotDefinedError
-from .sxtbiscuits import SXTBiscuit
+
+# done fighting with this, sorry
+sxtpypath = str(Path(__file__).parent.resolve())
+if sxtpypath not in sys.path: sys.path.append(sxtpypath) 
+from sxtenums import SXTApiCallTypes
+from sxtexceptions import SxTArgumentError, SxTAPINotDefinedError
+from sxtbiscuits import SXTBiscuit
 
 
 class SXTBaseAPI():
-    api_url = 'https://api.spaceandtime.app'
+    __au__:str = None 
     access_token = ''
+    refresh_token = ''
+    access_token_expires = 0
+    refresh_token_expires = 0 
     logger: logging.Logger
     network_calls_enabled:bool = True
     standard_headers = {
@@ -32,8 +39,20 @@ class SXTBaseAPI():
         with open(apiversionfile,'r') as fh:
             content = fh.read()
         self.versions = json.loads(content)
+        
+    def __settokens__(self, accessToken:str, accessTokenExpires:int, refreshToken:str='', refreshTokenExpires:int=0):
+        self.access_token = accessToken
+        self.refresh_token = refreshToken   
+        self.access_token_expires = accessTokenExpires
+        self.refresh_token_expires = refreshTokenExpires
 
-
+    @property
+    def api_url(self):
+        return self.__au__ if self.__au__ else 'https://api.makeinfinite.dev' # default 
+    @api_url.setter
+    def api_url(self, value):
+        self.__au__ = value
+        
     def prep_biscuits(self, biscuits=[]) -> list:
         """--------------------
         Accepts biscuits in various data types, and returns a list of biscuit_tokens as strings (list of str).  
@@ -55,7 +74,7 @@ class SXTBaseAPI():
             return [] 
         elif type(biscuits) == str:
             return [biscuits]
-        elif type(biscuits) == SXTBiscuit:  
+        elif 'SXTBiscuit' in str(type(biscuits)):  
             return [biscuits.biscuit_token]
         elif type(biscuits) == list:
             rtn=[]
@@ -87,10 +106,11 @@ class SXTBaseAPI():
             >>> newsql == "Select 'complex \nstring   ' as A from TableName Where A=1"
             True
         """
+        if sql_text == None or len(sql_text.strip()) == 0: return ''
         insinglequote = False
         indoublequote = False 
         rtn = []
-        prevchar = ''
+        char = prevchar = ''
         for char in list(sql_text.strip()):
 
             # escape anything in quotes
@@ -121,7 +141,8 @@ class SXTBaseAPI():
                  header_parms: dict = {}, 
                  data_parms: dict = {}, 
                  query_parms: dict = {}, 
-                 path_parms: dict = {} ):
+                 path_parms: dict = {},
+                 endpoint_full_override_flag: bool = False ) -> tuple[bool, object]:
         """--------------------
         Generic function to call and return SxT API. 
 
@@ -137,6 +158,7 @@ class SXTBaseAPI():
             query_parms: (dict): Name/value pairs to be added to the query string. {Name: Value}
             data_parms (dict): Dictionary to be used holistically for --data json object.
             path_parms (dict): Pattern to replace placeholders in URL. {Placeholder_in_URL: Replace_Value}
+            endpoint_full_override_flag (str): If True, endpoint is used verbatium, rather than constructing version + endpoint. Will negate any querystring or path parms.
 
         Results:
             bool: Indicating request success
@@ -161,40 +183,50 @@ class SXTBaseAPI():
 
         # otherwise, go get real data
         try:
-            if endpoint not in self.versions.keys(): 
-                raise SxTAPINotDefinedError("Endpoint not defined in API Lookup (apiversions.json). Please reach out to Space and Time for assistance. \nAs a work-around, you can try manually adding the endpoint to the SXTBaseAPI.versions dictionary.")
-            version = self.versions[endpoint]
-            self.logger.debug(f'API Call started for endpoint: {version}/{endpoint}')
-
-            if request_type not in SXTApiCallTypes: 
-                msg = f'request_type must be of type SXTApiCallTypes, not { type(request_type) }'
-                raise SxTArgumentError(msg, logger=self.logger)
-           
-            # Path parms
-            for name, value in path_parms.items():
-                endpoint = endpoint.replace(f'{{{name}}}', value)
-            
-            # Query parms
-            if query_parms !={}: 
-                endpoint = f'{endpoint}?' + '&'.join([f'{n}={v}' for n,v in query_parms.items()])
-            
             # Header parms
             headers = {k:v for k,v in self.standard_headers.items()} # get new object
             if auth_header: headers['authorization'] = f'Bearer {self.access_token}'
             headers.update(header_parms)
 
-            # final URL
-            url = f'{self.api_url}/{version}/{endpoint}'
 
-            match request_type:
-                case SXTApiCallTypes.POST   : callfunc = requests.post
-                case SXTApiCallTypes.GET    : callfunc = requests.get
-                case SXTApiCallTypes.PUT    : callfunc = requests.put
-                case SXTApiCallTypes.DELETE : callfunc = requests.delete
-                case _: raise SxTArgumentError('Call type must be SXTApiCallTypes enum.', logger=self.logger)
+            if endpoint_full_override_flag:
+                url = endpoint
+                self.logger.debug(f'API Call started for (custom) endpoint: {endpoint}')
 
+            else:
+                if endpoint not in self.versions.keys() and not endpoint_full_override_flag: 
+                    raise SxTAPINotDefinedError("Endpoint not defined in API Lookup (apiversions.json). Please reach out to Space and Time for assistance. \nAs a work-around, you can try manually adding the endpoint to the SXTBaseAPI.versions dictionary.")
+                version = self.versions[endpoint]
+                self.logger.debug(f'API Call started for endpoint: {version}/{endpoint}')
+            
+                # Path parms
+                for name, value in path_parms.items():
+                    endpoint = endpoint.replace(f'{{{name}}}', value)
+                
+                # Query parms
+                if query_parms !={}: 
+                    endpoint = f'{endpoint}?' + '&'.join([f'{n}={v}' for n,v in query_parms.items()])
+
+                # final URL
+                url = f'{self.api_url}/{version}/{endpoint}'
+
+            if request_type not in SXTApiCallTypes: 
+                msg = f'request_type must be of type SXTApiCallTypes, not { type(request_type) }'
+                raise SxTArgumentError(msg, logger=self.logger)
+            
             # Call API function as defined above
-            response = callfunc(url=url, data=json.dumps(data_parms), headers=headers)
+            from pprint import pprint
+            self.logger.debug(f'\nNew API call for endpoint: {url}')
+            self.logger.debug('  headers:')
+            self.logger.debug( headers if self.access_token=='' else str(headers).replace(self.access_token,'<<access_token>>') )
+            self.logger.debug('  data parms:')
+            self.logger.debug( data_parms if self.access_token=='' else str(data_parms).replace(self.access_token,'<<access_token>>') )
+            match request_type:
+                case SXTApiCallTypes.POST   : response = requests.post(url=url, data=json.dumps(data_parms), headers=headers)
+                case SXTApiCallTypes.GET    : response = requests.get(url=url, data=json.dumps(data_parms), headers=headers)
+                case SXTApiCallTypes.PUT    : response = requests.put(url=url, data=json.dumps(data_parms), headers=headers)
+                case SXTApiCallTypes.DELETE : response = requests.delete(url=url, data=json.dumps(data_parms), headers=headers)
+
             txt = response.text
             statuscode = response.status_code
             response.raise_for_status()
@@ -205,7 +237,7 @@ class SXTBaseAPI():
             except json.decoder.JSONDecodeError as ex:
                 rtn = {'text':txt, 'status_code':statuscode}
 
-            self.logger.debug(f'API call completed for endpoint: "{endpoint}" with result: {txt}')
+            self.logger.debug( f'API call completed for endpoint: "{endpoint}" with result: {txt[:2000]}')
             return True, rtn
 
         except requests.exceptions.RequestException as ex:
@@ -247,7 +279,7 @@ class SXTBaseAPI():
         return self.auth_code(user_id, prefix, joincode)
     
 
-    def auth_code(self, user_id:str, prefix:str = None, joincode:str = None):
+    def auth_code(self, user_id:str, prefix:str = None, joincode:str = None) -> tuple[bool, object]:
         """--------------------
         Calls and returns data from API: auth/code, which issues a random challenge token to be signed as part of the authentication workflow.
         
@@ -262,8 +294,145 @@ class SXTBaseAPI():
         """
         dataparms = {"userId": user_id}
         if prefix: dataparms["prefix"] = prefix
-        if joincode: dataparms[joincode] = joincode
-        success, rtn = self.call_api(endpoint = 'auth/code', auth_header = False, data_parms = dataparms)
+        if joincode: 
+            success, rtn = self.auth_code_register(user_id, prefix, joincode)
+        else:
+            success, rtn = self.call_api(endpoint = 'auth/code', auth_header = False, data_parms = dataparms)
+        return success, rtn if success else [rtn]
+
+
+    def gateway_proxy_add_existing_user(self, access_token:str) -> tuple[bool, object]:
+        """-------------------- 
+        Adds an authenticated user to the gateway proxy.  Fails if the user is not authenticated.
+
+        Args: 
+            user_id (str): UserID to be authenticated
+
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            dict: New Studio Password, or error message in a dict(json).
+        """        
+        endpoint = f'https://proxy.api.makeinfinite.dev/auth/add-existing?accessToken={access_token}'
+        success, response = self.call_api(endpoint = endpoint, 
+                                          auth_header = False, 
+                                          endpoint_full_override_flag=True)
+        self.logger.warning(f'add_user_to_gateway_proxy: {response}')
+        if success and 'tempPassword' in response: response = response['tempPassword']
+        return success, response
+
+
+
+    def gateway_proxy_login (self, user_id:str, password:str) -> tuple[bool, object]:
+        """-------------------- 
+        Login to the gateway proxy, and return the session id.
+
+        Args: 
+            user_id (str): UserID to be authenticated
+            password (str): Current, working password
+
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            object: Response information from the Gateway Proxy, including the session id, access token, etc.
+        """        
+        endpoint = 'https://proxy.api.makeinfinite.dev/auth/login'
+        success, response = self.call_api(endpoint = endpoint, 
+                                          auth_header = False, 
+                                          data_parms = {"userId": user_id, "password": password},
+                                          endpoint_full_override_flag=True)
+        return success, response
+
+
+
+    def gateway_proxy_change_password(self, user_id:str, old_password:str, new_password:str, session_id:str = None) -> tuple[bool, object]:
+        """-------------------- 
+        Logs into the gateway proxy and changes the user's password. Assuming the old_password still works, does not require network authentication.
+
+        Args: 
+            user_id (str): UserID to be authenticated
+            old_password (str): Current, working password
+            new_password (str): New password
+            session_id (str): (optional) Session ID if already authenticated, otherwise this function will login and return authentication information as well.
+
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            object: Response information from the Gateway Proxy, as list or dict(json). 
+        """        
+        endpoint = 'https://proxy.api.makeinfinite.dev/auth/reset'
+        if not session_id:
+            success, login_response = self.gateway_proxy_login(user_id, old_password)
+            if not success: 
+                raise SxTArgumentError(f'Failed to log into gateway proxy: {login_response}')
+            session_id = login_response['sessionId']
+ 
+        success, response = self.call_api(endpoint = endpoint, 
+                                          auth_header = False, 
+                                          header_parms={"sid": session_id},
+                                          data_parms = {"userId": user_id, "sid": session_id, 
+                                                        "tempPassword": old_password, "newPassword": new_password},
+                                          endpoint_full_override_flag=True)
+        self.logger.warning(f'changed gateway proxy password: {response}')
+        if login_response: response.update(login_response)
+        response['password'] = new_password
+        return success, response
+
+
+    def gateway_proxy_auth_apikey(self, api_key:str) -> tuple[bool, object]:
+        """-------------------- 
+        Logs into the gateway proxy using an API Key and returns an access token.
+
+        Args: 
+            api_key (str): API Key
+
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            object: Response information from the Gateway Proxy, as list or dict(json). 
+        """     
+        endpoint = 'https://proxy.api.makeinfinite.dev/auth/apikey'
+        if not api_key: raise SxTArgumentError('api_key is required')
+        success, response = self.call_api(endpoint = endpoint, 
+                                          auth_header = False, 
+                                          header_parms = {"apikey": api_key},
+                                          endpoint_full_override_flag=True)
+        if success: 
+            response['refreshToken'] = response['refreshTokenExpires'] = ''
+            self.__settokens__(response['accessToken'], response['accessTokenExpires'])
+        return success, response
+    
+
+    def auth_apikey(self, api_key:str) -> tuple[bool, object]:
+        """-------------------- 
+        Logs into the gateway proxy using an API Key and returns an access token. This is an alias for gateway_proxy_auth_apikey().
+
+        Args: 
+            api_key (str): API Key
+
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            object: Response information from the Gateway Proxy, as list or dict(json). 
+        """     
+        return self.gateway_proxy_auth_apikey(api_key)
+     
+
+
+    def auth_code_register(self, user_id:str, email:str, joincode:str = None, prefix:str = None) -> tuple[bool, object]:
+        """--------------------
+        Calls and returns data from API: auth/code-register, which issues a random challenge token to be signed as part of the authentication workflow, but also requires additional information with which to register a new user on the network.
+        
+        Args: 
+            user_id (str): UserID to be authenticated
+            email (str): Email address to validate new user
+            joincode (str): (optional) Joincode if creating a new user within an existing subscription. 
+            prefix (str): (optional) The message prefix for signature verification (used for improved front-end UX).
+
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            object: Response information from the Space and Time network, as list or dict(json). 
+        """
+        dataparms = {"userId": user_id, "email": email}
+        if prefix: dataparms["joincode"] = joincode
+        if prefix: dataparms["prefix"] = prefix
+
+        success, rtn = self.call_api(endpoint = 'auth/code-register', auth_header = False, data_parms = dataparms)
         return success, rtn if success else [rtn]
 
 
@@ -301,6 +470,8 @@ class SXTBaseAPI():
                      ,"key": public_key 
                      ,"scheme": scheme}
         success, rtn = self.call_api(endpoint='auth/token', auth_header=False, data_parms=dataparms)
+        if success:
+            self.__settokens__(rtn['accessToken'], rtn['accessTokenExpires'], rtn['refreshToken'], rtn['refreshTokenExpires'])
         return success, rtn if success else [rtn]
 
 
@@ -314,6 +485,8 @@ class SXTBaseAPI():
         """
         headers = { 'authorization': f'Bearer {refresh_token}' }
         success, rtn = self.call_api('auth/refresh', False, header_parms=headers)
+        if success:
+            self.__settokens__(rtn['accessToken'], rtn['accessTokenExpires'], rtn['refreshToken'], rtn['refreshTokenExpires'])
         return success, rtn if success else [rtn]
 
 
@@ -349,7 +522,7 @@ class SXTBaseAPI():
             bool: Success flag (True/False) indicating the api call worked as expected.
             object: Response information from the Space and Time network, as list or dict(json). 
         """
-        success, rtn = self.call_api(f'auth/idexists/{user_id}', False, SXTApiCallTypes.GET)
+        success, rtn = self.call_api('auth/idexists/{id}', False, SXTApiCallTypes.GET, path_parms={'id':user_id})
         return success, rtn if success else [rtn]
     
     
@@ -439,11 +612,7 @@ class SXTBaseAPI():
 
     def sql_ddl(self, sql_text:str, biscuits:list = None, app_name:str = None):
         """--------------------
-        Executes a database DDL statement, and returns status.
-
-        Calls and returns data from API: sql/ddl, which runs arbitrary DDL for creating resources.        
-        This will be slightly more performant than the generic sql_exec function, but requires a resource name.
-        Biscuits are always required for DDL.
+        **deprecated** -- now simply calls sql_exec. 
 
         Args: 
             sql_text (str): SQL query text to execute. Note, there is NO placeholder replacement.
@@ -454,28 +623,16 @@ class SXTBaseAPI():
             bool: Success flag (True/False) indicating the api call worked as expected.
             object: Response information from the Space and Time network, as list or dict(json). 
         """
-        headers = { 'originApp': app_name } if app_name else {}
-        sql_text = self.prep_sql(sql_text=sql_text)
-        biscuit_tokens = self.prep_biscuits(biscuits)
-        if biscuit_tokens==[]:  raise SxTArgumentError("sql_ddl requires 'biscuits', none were provided.", logger = self.logger)
-        dataparms = {"sqlText": sql_text
-                    ,"biscuits": biscuit_tokens }
-                    # ,"resources": [r for r in resources] }
-        success, rtn = self.call_api('sql/ddl', True, header_parms=headers, data_parms=dataparms)
-        return success, rtn if success else [rtn]
+        return self.sql_exec(sql_text=sql_text, biscuits=biscuits, app_name=app_name)
 
 
     def sql_dml(self, sql_text:str, resources:list, biscuits:list = None, app_name:str = None):
         """--------------------
-        Executes a database DML statement, and returns status.
-
-        Calls and returns data from API: sql/dml, which runs arbitrary DML for manipulating data. 
-        This will be slightly more performant than the generic sql_exec function, but requires a resource name.
-        Biscuits are required for any non-public-write tables.
+        **deprecated** -- now simply calls sql_exec. 
 
         Args: 
             sql_text (str): SQL query text to execute. Note, there is NO placeholder replacement.
-            resources (list): List of Resources ("schema.table_name") in the sql_text. 
+            resources (list): ** ignored / unneeded **
             biscuits (list): (optional) List of biscuit tokens for permissioned tables. If only querying public tables, this is not needed.
             app_name (str): (optional) Name that will appear in querylog, used for bucketing workload.
         
@@ -483,30 +640,16 @@ class SXTBaseAPI():
             bool: Success flag (True/False) indicating the api call worked as expected.
             object: Response information from the Space and Time network, as list or dict(json). 
         """
-        if type(resources) != list: resources = [resources]
-        headers = { 'originApp': app_name } if app_name else {}
-        sql_text = self.prep_sql(sql_text=sql_text)
-        biscuit_tokens = self.prep_biscuits(biscuits)
-        if type(biscuit_tokens) != list:  raise SxTArgumentError("sql_all requires parameter 'biscuits' to be a list of biscuit_tokens or SXTBiscuit objects.",  logger = self.logger)
-        headers = { 'originApp': app_name } if app_name else {}
-        dataparms = {"sqlText": sql_text
-                    ,"biscuits": biscuit_tokens
-                    ,"resources": [r for r in resources] }
-        success, rtn = self.call_api('sql/dml', True, header_parms=headers, data_parms=dataparms)
-        return success, rtn if success else [rtn]
+        return self.sql_exec(sql_text=sql_text, biscuits=biscuits, app_name=app_name)
 
 
     def sql_dql(self, sql_text:str, resources:list, biscuits:list = None, app_name:str = None):
         """--------------------
-        Executes a database DQL / SQL query, and returns a dataset as a list of dictionaries.
-
-        Calls and returns data from API: sql/dql, which runs arbitrary SELECT statements that return data.        
-        This will be slightly more performant than the generic sql_exec function, but requires a resource name.
-        Biscuits are required for any non-public tables.
+        **deprecated** -- now simply calls sql_exec. 
 
         Args: 
             sql_text (str): SQL query text to execute. Note, there is NO placeholder replacement.
-            resources (list): List of Resources ("schema.table_name") in the sql_text. 
+            resources (list): ** ignored / unneeded **
             biscuits (list): (optional) List of biscuit tokens for permissioned tables. If only querying public tables, this is not needed.
             app_name (str): (optional) Name that will appear in querylog, used for bucketing workload.
 
@@ -514,15 +657,27 @@ class SXTBaseAPI():
             bool: Success flag (True/False) indicating the api call worked as expected.
             object: Response information from the Space and Time network, as list or dict(json). 
         """
-        if type(resources) != list: resources = [resources]
-        headers = { 'originApp': app_name } if app_name else {}
+        return self.sql_exec(sql_text=sql_text, biscuits=biscuits, app_name=app_name)
+
+
+    def sql_exec_tamperproof(self, sql_text:str, biscuits:list = None):
+        """--------------------
+        Executes a ZK tamperproof database statement/query, and returns a status or data plus a ZK verification code.
+
+        Args:        
+            sql_text (str): SQL query text to execute. Note, there is NO placeholder replacement.
+            biscuits (list): (optional) List of biscuit tokens for permissioned tables. If only querying public tables, this is not needed.
+
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            object: Response information from the Space and Time network, as list or dict(json). 
+        """
         sql_text = self.prep_sql(sql_text=sql_text)
         biscuit_tokens = self.prep_biscuits(biscuits)
         if type(biscuit_tokens) != list:  raise SxTArgumentError("sql_all requires parameter 'biscuits' to be a list of biscuit_tokens or SXTBiscuit objects.",  logger = self.logger)
         dataparms = {"sqlText": sql_text
-                    ,"biscuits": biscuit_tokens
-                    ,"resources": [r for r in resources] }
-        success, rtn = self.call_api('sql/dql', True, header_parms=headers, data_parms=dataparms)
+                    ,"biscuits": biscuit_tokens }
+        success, rtn = self.call_api('sql/tamperproof-query', True, data_parms=dataparms)
         return success, rtn if success else [rtn]
 
 
@@ -539,6 +694,9 @@ class SXTBaseAPI():
             bool: Success flag (True/False) indicating the api call worked as expected.
             object: Response information from the Space and Time network, as list of dict. 
         """
+        allowed_scope = ['subscription', 'public', 'all']
+        if scope.lower() not in allowed_scope:
+            raise SxTArgumentError(f"Invalid value for scope '{scope}'. Must be one of {allowed_scope}.", logger = self.logger)
         success, rtn = self.call_api('discover/schema',True, SXTApiCallTypes.GET, query_parms={'scope':scope})
         return success, (rtn if success else [rtn]) 
         
@@ -558,11 +716,16 @@ class SXTBaseAPI():
             bool: Success flag (True/False) indicating the api call worked as expected.
             object: Response information from the Space and Time network, as list of dict. 
         """
+        allowed_scope = ['subscription', 'public', 'all']
+        if scope.lower() not in allowed_scope:
+            raise SxTArgumentError(f"Invalid value for scope '{scope}'. Must be one of {allowed_scope}.", logger = self.logger)
+        scope = 'PUBLIC' if scope.upper() == 'PUBLIC' else 'SUBSCRIPTION'
         version = 'v2' if 'discover/table' not in list(self.versions.keys()) else self.versions['discover/table'] 
         schema_or_namespace = 'namespace' if version=='v1' else 'schema'
-        query_parms = {'scope':scope.upper(), schema_or_namespace:schema.upper()}
+        query_parms = {'scope':scope, schema_or_namespace:schema.upper()}
         if version != 'v1' and search_pattern: query_parms['searchPattern'] = search_pattern
-        success, rtn = self.call_api('discover/table',True,  SXTApiCallTypes.GET, query_parms=query_parms)
+        
+        success, rtn = self.call_api('discover/table', True,  SXTApiCallTypes.GET, query_parms=query_parms)
         return success, (rtn if success else [rtn]) 
 
 
@@ -582,7 +745,8 @@ class SXTBaseAPI():
             object: Response information from the Space and Time network, as list of dict. 
         """
         version = 'v2' if 'discover/view' not in list(self.versions.keys()) else self.versions['discover/view'] 
-        query_parms = {'scope':scope.upper(), 'schema':schema.upper()}
+        scope = 'PUBLIC' if scope.upper() == 'PUBLIC' else 'SUBSCRIPTION'
+        query_parms = {'scope':scope, 'schema':schema.upper()}
         if version != 'v1' and search_pattern: query_parms['searchPattern'] = search_pattern
         success, rtn = self.call_api('discover/view',True,  SXTApiCallTypes.GET, query_parms=query_parms)
         return success, (rtn if success else [rtn]) 
@@ -608,6 +772,22 @@ class SXTBaseAPI():
         success, rtn = self.call_api('discover/table/column',True,  SXTApiCallTypes.GET, query_parms=query_parms)
         return success, (rtn if success else [rtn]) 
     
+
+
+    def subscription_set_name(self, name:str) -> tuple[bool, dict]:
+        """--------------------
+        Assigns a user-friendly name to an existing subscription.
+        
+        Args: 
+            name (str): Subscription user-friendly name.  
+
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            object: Response information from the Space and Time network, as list or dict(json). 
+        """
+        if len(name)==0: return False, 'Name cannot be empty.'
+        success, rtn = self.call_api('subscription/name', True, SXTApiCallTypes.PUT, query_parms={'subscriptionName':name})
+        return success, {n:v for n,v in rtn.items() if v} if success else rtn
 
 
     def subscription_get_info(self):
@@ -692,22 +872,63 @@ class SXTBaseAPI():
         endpoint = 'subscription/invite/{joinCode}'
         version = 'v2' if endpoint not in list(self.versions.keys()) else self.versions[endpoint] 
         success, rtn = self.call_api(endpoint=endpoint, auth_header=True, request_type=SXTApiCallTypes.POST,
-                                     path_parms= {'{joinCode}': joincode} )
+                                     path_parms= {'joinCode': joincode} )
         return success, (rtn if success else [rtn]) 
 
 
+    def subscription_leave(self):
+        """--------------------
+        Allows the authenticated user to leave their subscription.
 
-if __name__ == '__main__':
+        Calls and returns data from API: subscription/leave.  
 
-    token = 'eyJ0eXBlIjoiYWNjZXNzIiwia2lkIjoiZTUxNDVkYmQtZGNmYi00ZjI4LTg3NzItZjVmNjNlMzcwM2JlIiwiYWxnIjoiRVMyNTYifQ.eyJpYXQiOjE2OTU5MTQxMjgsIm5iZiI6MTY5NTkxNDEyOCwiZXhwIjoxNjk1OTE1NjI4LCJ0eXBlIjoiYWNjZXNzIiwidXNlciI6InN0ZXBoZW4iLCJzdWJzY3JpcHRpb24iOiIzMWNiMGI0Yi0xMjZlLTRlM2MtYTdhMS1lNWRmNDc4YTBjMDUiLCJzZXNzaW9uIjoiNTg2OTQyOTgzMjc2OTkyNzI5MDViMDQyIiwic3NuX2V4cCI6MTY5NjAwMDUyODQ2OSwiaXRlcmF0aW9uIjoiZDc0M2Y1YjRkNTkyYzdmNjU4ZDA5ZmM2In0.lKjO0CbQ4k8hAEPsbs9nL1qXGzm01ZfJEF_l8NiRQRbTBkrdPV53H8lzdJsHTpGdcgSvsgbwpxzKvUnqyl1cAg'
-    api = SXTBaseAPI(token)
-    
-    print( api.subscription_get_info() )
-    success, users = api.subscription_get_users() 
+        Args: 
+            None
+        
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            object: Response information from the Space and Time network, as list or dict(json). 
+        """
+        endpoint = 'subscription/leave'
+        version = 'v2' if endpoint not in list(self.versions.keys()) else self.versions[endpoint] 
+        success, rtn = self.call_api(endpoint=endpoint, auth_header=True, request_type=SXTApiCallTypes.POST )
+        return success, (rtn if success else [rtn])
 
-    success, response = api.subscription_invite_user(role='owner')
-    joincode = response['text']
 
-    print( api.subscription_join(joincode=joincode) )
+    def subscription_get_users(self) -> tuple[bool, dict]:
+        """
+        Returns a list of all users in the current subscription.
 
-    pass 
+        Args:
+            None
+
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            object: Dictionary of User_IDs and User Permission level in the subscription, or error as json.
+        """
+        endpoint = 'subscription/users'
+        version = 'v2' if endpoint not in list(self.versions.keys()) else self.versions[endpoint] 
+        success, rtn = self.call_api(endpoint=endpoint, auth_header=True, request_type=SXTApiCallTypes.GET )
+        if success: rtn = rtn['roleMap']
+        return success, rtn
+        
+
+    def subscription_remove(self, User_ID_to_Remove:str) -> tuple[bool, dict]:
+        """
+        Removes another user from the current user's subscription.  Current user must have more authority than the targeted user to remove.
+
+        Args: 
+            User_ID_to_Remove (str): ID of the user to remove from the current user's subscription.
+
+        Returns:
+            bool: Success flag (True/False) indicating the api call worked as expected.
+            object: Response information from the Space and Time network, as list or dict(json).
+        """
+        endpoint = 'subscription/remove/{userId}'
+        version = 'v2' if endpoint not in list(self.versions.keys()) else self.versions[endpoint] 
+        success, rtn = self.call_api(endpoint=endpoint, auth_header=True, request_type=SXTApiCallTypes.POST,
+                                     path_parms= {'userId': User_ID_to_Remove} )
+        return success, rtn
+        
+
+ 

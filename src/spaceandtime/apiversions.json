@@ -3,6 +3,7 @@
     "auth/refresh":       "v1",
     "auth/logout":        "v1",
     "auth/code":          "v1",
+    "auth/code-register": "v1",
     "auth/validtoken":    "v1",
     "auth/idexists/{id}": "v1",
     "auth/keys/code":     "v1",
@@ -16,6 +17,7 @@
     "encryption/configure":        "v1",
     "sql/queries/{queryName}":     "v2",
     "sql/queries-by-id/{queryId}": "v2",
+    "sql/tamperproof-query":       "v2",
     "discover/schema":                        "v2",
     "discover/table":                         "v2", 
     "discover/view":                          "v2", 
@@ -29,7 +31,11 @@
     "discover/blockchains/{chainId}/schemas": "v2",                         
     "discover/blockchains/{chainId}/meta":    "v2",
     "subscription":                           "v1",
-    "subscription/users":                     "v1",
     "subscription/invite":                    "v1",
-    "subscription/invite/{joinCode}":         "v1"
+    "subscription/invite/{joinCode}":         "v1",
+    "subscription/leave":                    "v1",
+    "subscription/remove/{userId}":           "v1",   
+    "subscription/setrole/{userId}":          "v1",
+    "subscription/users":                     "v1",
+    "subscription/name":                      "v1"
 }

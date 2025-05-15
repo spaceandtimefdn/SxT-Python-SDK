@@ -10,7 +10,7 @@ from spaceandtime.sxtkeymanager import SXTKeyManager
 from spaceandtime.sxtresource import SXTResource, SXTTable
 from spaceandtime.sxtbiscuits import SXTBiscuit
 
-API_URL = 'https://api.spaceandtime.app'
+API_URL = 'https://api.makeinfinite.dev'
 
 
 def test_resource_save_load_bug():
@@ -34,22 +34,21 @@ def test_resource_save_load_bug():
     assert tbl2.table_name == tbl.table_name
 
 
-
-
 def test_resource_methods():
     keys = SXTKeyManager(new_keypair=True)
     rs = SXTResource('Test')
-    userA = SXTUser(testuser='A', user_private_key=keys.private_key)
-    userB = SXTUser(testuser='B', user_private_key=keys.private_key)
-    userE = SXTUser(testuser='E')
+    userA = SXTUser(user_id='A', user_private_key=keys.private_key, api_key='')
+    userB = SXTUser(user_id='B', user_private_key='', api_key='')
+    userE = SXTUser(user_id='E', api_key='')
     userE.key_manager = SXTKeyManager()
     userO = object()
     userS = 'just a string, man'
-    userRS = SXTUser(testuser='RS', user_private_key=keys.private_key)
+    userK = SXTUser(api_key='sxt_apikey123')
+    userRS = SXTUser(user_id='RS', user_private_key=keys.private_key)
     rs.user = userRS 
 
     assert rs.get_first_valid_user(userO, userS, userE, userA, userB) == userA
-    assert rs.get_first_valid_user(userS, userB, userA, userE) == userB
+    assert rs.get_first_valid_user(userS, userB, userA, userE) == userA
     assert rs.get_first_valid_user(userA, userB, userO, userS) == userA
     assert rs.get_first_valid_user(userS, userRS, userB, userA, userO) == userRS
     assert rs.get_first_valid_user() == userRS
@@ -64,7 +63,7 @@ def test_inserts_deletes_updates():
     sxt = SpaceAndTime()
     sxt.authenticate()
 
-    tbl = SXTTable(name='SXTTemp.Test_DML', from_file='./.env', SpaceAndTime_parent=sxt)
+    tbl = SXTTable(name='SXTTemp.Test_DML1', from_file='./.env', SpaceAndTime_parent=sxt)
     tbl.create_ddl = """
     CREATE TABLE {table_name} 
     ( MyID         int
@@ -77,14 +76,14 @@ def test_inserts_deletes_updates():
     if not tbl.exists: 
         tbl.create()
     else:
-        tbl.delete(where='')
+        tbl.delete(where='1=1')
 
-    data = [ {'MyID':1, 'MyName':'Abby',  'MyNumber':6}
+    data_in = [ {'MyID':1, 'MyName':'Abby',  'MyNumber':6}
             ,{'MyID':2, 'MyName':'Bob',   'MyNumber':6}
             ,{'MyID':3, 'MyName':'Chuck', 'MyNumber':6}
             ,{'MyID':4, 'MyName':'Daria', 'MyNumber':6}
             ]
-    tbl.insert.with_list_of_dicts(data)
+    tbl.insert.with_list_of_dicts(data_in)
     success, data = tbl.select()
     assert success
     assert [r['MYNUMBER'] for r in data] == [6, 6, 6, 6]
@@ -147,12 +146,32 @@ def test_inserts_deletes_updates():
     assert success
     assert results == [{'UPDATED': 0}]
 
+    success, results = tbl.delete(where = '1=1') # empty table
+    assert success
+    success, results = tbl.insert.list_of_dicts_batch(data_in)
+    assert success
+    success, results = tbl.select(f'select count(*) from {tbl.table_name}')
+    assert success
+    assert results == [{'COUNT': 4}]
+
     if tbl.exists:  
         success, result = tbl.drop()
         assert success
 
     pass
 
+
+def test_table_discovery():
+    sxt = SpaceAndTime()
+    sxt.authenticate()
+    tbl = SXTTable('Polygon.Blocks', SpaceAndTime_parent=sxt)
+
+    assert tbl.columns != {}
+ 
+
 if __name__ == '__main__':
-    test_inserts_deletes_updates()
+    # test_table_discovery()
+    # test_resource_save_load_bug()
+    # test_resource_methods()
+    # test_inserts_deletes_updates()
     pass 

@@ -1,13 +1,17 @@
-import logging, random, time, json
+import logging, random, sys, json
 import pandas as pd 
 from io import StringIO
 from datetime import datetime
 from pathlib import Path
-from .sxtuser import SXTUser
-from .sxtresource import SXTTable, SXTView
-from .sxtkeymanager import SXTKeyManager
-from .sxtenums import *
-from .sxtexceptions import *
+
+# done fighting with this, sorry
+sxtpypath = str(Path(__file__).parent.resolve())
+if sxtpypath not in sys.path: sys.path.append(sxtpypath)
+from sxtuser import SXTUser
+from sxtresource import SXTTable, SXTView
+from sxtkeymanager import SXTKeyManager
+from sxtenums import *
+from sxtexceptions import *
 
 class SpaceAndTime:
 
@@ -30,7 +34,9 @@ class SpaceAndTime:
                 user_id=None, user_private_key=None, 
                 default_local_folder:str = None,
                 application_name='SxT-SDK', 
-                logger: logging.Logger = None):
+                logger: logging.Logger = None,
+                api_key:str = None,
+                authenticate:bool = False):
         """Create new instance of Space and Time SDK for Python"""
         if logger: 
             self.logger = logger 
@@ -50,8 +56,10 @@ class SpaceAndTime:
         self.default_local_folder = default_local_folder if default_local_folder else Path('.').resolve()
         self.envfile_filepath = envfile_filepath if envfile_filepath else self.default_local_folder
 
-        self.user = SXTUser(dotenv_file=envfile_filepath, api_url=api_url, user_id=user_id, user_private_key=user_private_key, logger=self.logger)
+        self.user = SXTUser(dotenv_file=envfile_filepath, api_url=api_url, user_id=user_id, user_private_key=user_private_key, logger=self.logger, api_key=api_key)
         self.key_manager = self.user.key_manager
+
+        if authenticate: self.authenticate()
         return None 
     
     @property
@@ -62,9 +70,16 @@ class SpaceAndTime:
     def refresh_token(self) -> str:
         return self.user.refresh_token
     
+    @property
+    def api_key(self) -> str:
+        return self.user.api_key
+    @api_key.setter
+    def api_key(self, value:str):
+        self.user.api_key = value
+
     def logger_addFileHandler(self, file:Path) -> None:
         """Adds a logging file (handler) location to the default logging object, creating any needed folders and replacing {datetime}, {date}, or {time} with sxt start_time."""
-        file = Path( self.__replaceall(str(file.resolve()), replacemap={}) )
+        file = Path( self.__replaceall(str(Path(file).resolve()), replacemap={}) )
         file.parent.mkdir(parents=True, exist_ok=True)
         fh = logging.FileHandler(file)
         fh.formatter = self.logger.sxtformat
@@ -246,7 +261,7 @@ class SpaceAndTime:
     
     def discovery_get_schemas(self, scope:SXTDiscoveryScope = SXTDiscoveryScope.ALL, 
                               user:SXTUser = None, 
-                              return_as:type = list) -> tuple:
+                              return_as:type = dict) -> tuple:
         """--------------------
         Connects to the Space and Time network and returns all available schemas.
 
@@ -261,13 +276,22 @@ class SpaceAndTime:
         if not user: user = self.user
         if not scope: scope = SXTDiscoveryScope.ALL
         success, response = user.base_api.discovery_get_schemas(scope=scope.name)  
-        if success:
-            if return_as in [list, str]: 
-                response = sorted([tbl['schema'] for tbl in response])
-                if return_as == str: response = ', '.join(response)
-            elif return_as in [json, dict]: pass # no change needed
-            else:
-                self.logger.warning('Supplied an unsupported return type, only [json, list, str] currently supported. Defaulting to dict.')
+        if not success: 
+            self.logger.warning("WARNING: base_api.discovery_get_schemas() failed to return Success")
+            return False, None
+
+        if return_as in [list, str]: 
+            response = sorted([s['schema'] for s in response])
+            if return_as == str: response = ', '.join(response)
+        else: 
+            # all other options are flavors of a dict:
+            response = {s['schema']:s for s in response}
+
+        # which flavor?
+        if   return_as in [json]: response = json.dumps(response, indent=4)
+        elif return_as in [dict, list, str]: pass # good as-is 
+        else:
+            self.logger.warning('Supplied an unsupported return type, only [json, dict, list, str] currently supported. Defaulting to dict.')
         return success, response
 
         
@@ -275,7 +299,7 @@ class SpaceAndTime:
                              scope:SXTDiscoveryScope = SXTDiscoveryScope.ALL, 
                              user:SXTUser = None, 
                              search_pattern:str = None, 
-                             return_as:type = json) -> tuple:
+                             return_as:type = dict) -> tuple:
         """--------------------
         Connects to the Space and Time network and returns all available tables within a schema.
 
@@ -292,20 +316,30 @@ class SpaceAndTime:
         if not user: user = self.user
         if not scope: scope = SXTDiscoveryScope.ALL
         success, response = user.base_api.discovery_get_tables(scope=scope.name, schema=schema, search_pattern=search_pattern)  
-        if success:
-            if return_as in [list, str]: 
-                response = sorted([ f"{r['schema']}.{r['table']}" for r in response])
-                if return_as == str: response = ', '.join(response)
-            elif return_as in [dict,json]: response = {f"{r['schema']}.{r['table']}":r for r in response}
-            else:
-                self.logger.warning('Supplied an unsupported return type, only [json, dict, list, str] currently supported. Defaulting to dict.')
+        if not success: 
+            self.logger.warning("WARNING: base_api.discovery_get_tables() failed to return Success")
+            return False, None
+
+        if return_as in [list, str]: 
+            response = sorted([ f"{r['schema']}.{r['table']}" for r in response])
+            if return_as == str: response = ', '.join(response)
+        else: 
+            # all other options are flavors of a dict:
+            response = {f"{r['schema']}.{r['table']}":r for r in response}
+
+        # which flavor?
+        if   return_as in [json]: response = json.dumps(response, indent=4)
+        elif return_as in [dict, list, str]: pass # good as-is 
+        else:
+            self.logger.warning('Supplied an unsupported return type, only [json, dict, list, str] currently supported. Defaulting to dict.')
         return success, response
+
 
 
     def discovery_get_table_columns(self, schema:str, tablename:str, 
                              user:SXTUser = None, 
                              search_pattern:str = None, 
-                             return_as:type = json) -> tuple:
+                             return_as:type = dict) -> tuple:
         """--------------------
         Connects to the Space and Time network and returns all available columns within a table.
 
@@ -331,183 +365,56 @@ class SpaceAndTime:
         response = sorted(response, key=lambda d: d['position'])
 
         if return_as in [list, str]: 
-            response = sorted([ f"{r['column']}" for r in response])
+            response = ([ f"{r['column']}" for r in response])
             if return_as == str: response = ', '.join(response)
-        elif return_as == dict: 
+        else: 
+            # all other options are flavors of a dict:
             response = {r['column']:{n:v for n,v in r.items() if n!='column'} for r in response}
-        elif return_as == json: pass # return list_of_dicts 
+
+        # which flavor?
+        if   return_as in [json]: response = json.dumps(response, indent=4)
+        elif return_as in [dict, list, str]: pass # good as-is 
         else:
-            self.logger.warning('Supplied an unsupported return type, only [json, list, str] currently supported. Defaulting to dict.')
+            self.logger.warning('Supplied an unsupported return type, only [json, dict, list, str] currently supported. Defaulting to dict.')
         return success, response
 
+
         
-        
+    def discovery_get_views(self, schema:str, 
+                             scope:SXTDiscoveryScope = SXTDiscoveryScope.ALL, 
+                             user:SXTUser = None, 
+                             search_pattern:str = None, 
+                             return_as:type = dict) -> tuple:
+        """--------------------
+        Connects to the Space and Time network and returns all available views within a schema, along with view text and other metadata.
 
+        Args:
+            schema (str): Schema name to search for views.
+            scope (SXTDiscoveryScope): (optional) Scope of objects to return: All, Public, or Subscription. Defaults to SXTDiscoveryScope.ALL.
+            user (SXTUser): (optional) Authenticated User object. Uses default user if omitted.
+            search_pattern (str): (optional) Tablename pattern to match for inclusion into result set. Defaults to None / all tables.
+            return_as (type): (optional) Python type to return. Currently supports json, dict (unabridged), list, str (abridged). 
 
-    
+        Returns: 
+            object: Return type defined with the return_as feature.
+        """        
+        if not user: user = self.user
+        if not scope: scope = SXTDiscoveryScope.ALL
+        success, response = user.base_api.discovery_get_views(schema=schema, scope=scope.name, search_pattern=search_pattern)  
+        if not success: 
+            self.logger.warning("WARNING: base_api.discovery_get_views() failed to return Success")
+            return False, None
 
-if __name__ == '__main__':
-    from pprint import pprint
-    def randpad(i=6): return str(random.randint(0,999999)).rjust(6,'0')
+        if return_as in [list, str]: 
+            response = sorted([ f"{r['schema']}.{r['view']}" for r in response])
+            if return_as == str: response = ', '.join(response)
+        else:
+            # all other options are flavors of a dict:
+            response = {f"{r['schema']}.{r['view']}":r for r in response}
 
-    
-
-    if True:
-
-        # BASIC USAGE 
-        sxt = SpaceAndTime()
-        sxt.authenticate()
-
-        pprint( sxt.discovery_get_schemas(return_as=dict) )
-        pprint( sxt.discovery_get_tables(schema='SXTDemo', return_as=dict) )
-
-        success, rows = sxt.execute_query(
-            'select * from POLYGON.BLOCKS limit 5')
-        pprint( rows )
-
-
-        # bit more complicated:
-        success, rows = sxt.execute_query("""
-            SELECT 
-            substr(time_stamp,1,7) AS YrMth
-            ,count(*) AS block_count
-            FROM polygon.blocks 
-            GROUP BY YrMth
-            ORDER BY 1 desc """ )
-        pprint( sxt.json_to_csv(rows) )
-
-        print( sxt.user )
-        
-
-        # discovery calls provide network information
-        success, schemas = sxt.discovery_get_schemas()
-        pprint(f'There are {len(schemas)} schemas currently on the network.')
-        pprint(schemas)
-
-
-        for t in [list, json, str]:
-            success, tables = sxt.discovery_get_tables('SXTDEMO', return_as=t)
-            if success: pprint( tables )
-
-        # Create a table (with random name)
-        tableA = SXTTable(name = f"SXTTEMP.MyTestTable_{randpad()}", 
-                        new_keypair=True, default_user=sxt.user, logger=sxt.logger,
-                        access_type=SXTTableAccessType.PERMISSSIONED)
-        tableA.create_ddl = """
-        CREATE TABLE {table_name} 
-        ( MyID         int
-        , MyName       varchar
-        , MyDate       date
-        , Primary Key(MyID) 
-        ) {with_statement}
-        """ 
-        tableA.add_biscuit('read',  tableA.PERMISSION.SELECT )
-        tableA.add_biscuit('write', tableA.PERMISSION.SELECT, tableA.PERMISSION.INSERT, 
-                                    tableA.PERMISSION.UPDATE, tableA.PERMISSION.DELETE,
-                                    tableA.PERMISSION.MERGE )
-        tableA.add_biscuit('admin', tableA.PERMISSION.ALL )
-        
-        tableA.save() # <-- Important!  Don't lose your keys, or you lose control of your table
-        success, results = tableA.create()
-
-        if success:  # load some records
-
-            # generate some dummy data
-            cols = ['MyID','MyName','MyDate']
-            data = [[i, chr(64+i), f'2023-09-0{i}'] for i in list(range(1,10))]
-
-            # insert 
-            tableA.insert(columns=cols, data=data)
-
-            # select rows, just for fun
-            success, rows = tableA.select()
-            pprint( rows )
-
-            success, results = tableA.delete(where='MyID=6')
-
-            # should be one less than last time
-            success, rows = tableA.select()
-            pprint( rows )
-            
-
-
-        # emulate starting over, loading from save file
-        user_selection = tableA.recommended_filename
-        tableA = None
-        sxt = None 
-
-        # reload from save file:
-        sxt = SpaceAndTime()
-        sxt.authenticate()
-
-        tableA = SXTTable(from_file = user_selection, default_user=sxt.user)
-        pprint( tableA )
-        pprint( tableA.select() )
-
-
-        # create a view 
-        viewB = SXTView('SXTTEMP.MyTest_Odds', default_user=tableA.user, 
-                        private_key=tableA.private_key, logger=tableA.logger)
-        viewB.add_biscuit('read', viewB.PERMISSION.SELECT)
-        viewB.add_biscuit('admin', viewB.PERMISSION.ALL) 
-        viewB.table_biscuit = tableA.get_biscuit('admin')
-        viewB.create_ddl = """
-            CREATE VIEW {view_name} 
-            {with_statement} 
-            AS
-            SELECT *
-            FROM """ + tableA.table_name + """
-            WHERE MyID in (1,3,5,7,9) """
-        
-        viewB.save() # <-- Important! don't lose keys!
-        viewB.create()
-
-        # the view will be created immediately, but there may be a small delay in seeing data
-        # until end of 2023.
-        
-        input("""
-            Now is your time to pause and play around... 
-            after pressing enter, the script will drop objects 
-            in order to clean up.
-              
-            Note, if you wait too long (>25min) the access_token will time-out
-            and you'll need to tableA.user.authenticate() again. 
-              """)
-
-        viewB.drop()
-        tableA.drop()
-
-    print( tableA.recommended_filename )
-    print( viewB.recommended_filename )
-    print( sxt.user.recommended_filename )
-
-    # Multiple Users, Multiple Tables
-    suzy = SXTUser('.env', authenticate=True)
-
-    bill = SXTUser()
-    bill.load('.env')
-    bill.authenticate()
-
-    print('\nDifferent Logins? ', suzy.access_token != bill.access_token)
-
-    # new user
-    pat = SXTUser(user_id=f'pat_{randpad()}')
-    pat.new_keypair()
-    pat.api_url = suzy.api_url
-    pat.save() # <-- Important! don't lose keys!
-    pat.authenticate()
-
-    # suzy to invite pat:
-    if suzy.user_type in ['owner','admin']: 
-        joincode = suzy.generate_joincode()
-        success, results = pat.join_subscription(joincode=joincode)
-        pprint( results )
-
-
-    # emulate starting over
-    pats_file = pat.recommended_filename
-    pat = SXTUser(dotenv_file=pats_file)
-    pat.authenticate()
-
-    pass 
-    
+        # which flavor?
+        if   return_as in [json]: response = json.dumps(response, indent=4)
+        elif return_as in [dict,list, str]: pass # good as-is
+        else:
+            self.logger.warning('Supplied an unsupported return type, only [json, dict, list, str] currently supported. Defaulting to dict.')
+        return success, response
