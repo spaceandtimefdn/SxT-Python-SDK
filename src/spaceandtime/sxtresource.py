@@ -1,12 +1,16 @@
-import logging, json, random, time
+import logging, json, math, time, os, sys
 from pysteve import pySteve
 from pathlib import Path
 from datetime import datetime
-from .sxtenums import SXTResourceType, SXTPermission, SXTKeyEncodings, SXTTableAccessType
-from .sxtexceptions import SxTArgumentError, SxTFileContentError, SxTExceptions
-from .sxtbiscuits import SXTBiscuit
-from .sxtkeymanager import SXTKeyManager
-from .sxtuser import SXTUser
+
+# done fighting with this, sorry
+sxtpypath = str(Path(__file__).parent.resolve())
+if sxtpypath not in sys.path: sys.path.append(sxtpypath)
+from sxtenums import SXTResourceType, SXTPermission, SXTKeyEncodings, SXTTableAccessType
+from sxtexceptions import SxTArgumentError, SxTFileContentError, SxTExceptions
+from sxtbiscuits import SXTBiscuit
+from sxtkeymanager import SXTKeyManager
+from sxtuser import SXTUser
 
 class SXTResource():
     # child objects should override: self.__with__, has_with_statement(), self.resource_type
@@ -205,10 +209,12 @@ class SXTResource():
         """Returns True of the resource appears on the Space and Time network, or False if it is missing.  
         Returns None if a connection cannot be established or encountered an error."""
         if self.user.access_expired: self.user.authenticate()
+        # __existfunc__ is defined by the interhiriting child class (table, view, etc.) which has the same signature, but called here
         success, resources = self.__existfunc__(schema=self.schema)
         if success:
             apiname = 'table' if self.resource_type.name.lower() == 'table' else 'view'
-            does_exist = f"{self.schema}.{self.name}".upper() in [ f"{r['schema']}.{r[apiname]}" for r in resources]
+
+            does_exist = str(self.name).upper() in [ r[apiname] for r in resources]
             self.logger.debug(f'testing whether {self.resource_name} exists:  {str(does_exist)}')
             return does_exist 
         else:
@@ -391,7 +397,9 @@ class SXTResource():
             self.logger.warning('No SXTUser objects were provided. Returning None, but this may cause downstream errors.')
             return None
         
-        all_valid_user_objects = [user for user in all_user_objects if len(user.user_id)>0 and len(user.private_key)>0]
+        all_valid_user_objects = [user for user in all_user_objects if 
+                                  (len(user.user_id)>0 and len(user.private_key)>0) 
+                                  or len(user.api_key)>0]
         if all_valid_user_objects == []:
             self.logger.warning('None of the supplied SXTUser objects appear capable of connecting to SXT Network. Returning the first, but this may cause downstream errors.')
             return all_user_objects[0]
@@ -459,7 +467,7 @@ class SXTResource():
         return success, results
         
 
-    def select(self, sql_text:str = '', columns:list = ['*'], user:SXTUser = None, biscuits:list = None, row_limit:int = 50) -> json:
+    def select(self, sql_text:str = '', columns:list = ['*'], user:SXTUser = None, biscuits:list = None, row_limit:int = 50) -> tuple[bool, dict]:
         """--------------------
         Issues a SELECT statement to the Space and Time network, and report back success and rows (or failure details).
 
@@ -674,9 +682,10 @@ class SXTResource():
         """--------------------
         Accepts a string and returns a DB safe insert string, wrapped in quotes with escape characters.
         """
-        if not original_column_value: original_column_value = ''
-        rtn = "'" + str(original_column_value).strip().replace("'","''") + "'"
-        return rtn
+        return "'" + str(original_column_value).strip().replace("'","''") + "'"  if original_column_value!=None else 'NULL'
+        # if original_column_value==None: original_column_value = 'NULL'
+        # rtn = "'" + str(original_column_value).strip().replace("'","''") + "'"
+        # return rtn
 
 
 
@@ -733,6 +742,16 @@ class SXTTable(SXTResource):
     def table_name(self, value):
         self.resource_name = value
     
+
+    __cols__:dict = None
+    @property
+    def columns(self) -> dict: 
+        if self.__cols__ is None: self.get_column_names()
+        return self.__cols__
+    @columns.setter
+    def columns(self, value): self.__cols__ = value
+
+
     @property
     def partition_column(self) -> str:
         if 'partition_cols' in self.__with__.keys:
@@ -774,36 +793,41 @@ class SXTTable(SXTResource):
         """Returns a dictonary of column_name : data_type as defined in the create_ddl.
         
         Useful when an iterable list of columns (and types) is required, such as building 
-        INSERT statements or view SELECT lists.  Order should be preserved, although as a dict 
-        object type, this is technically not guaranteed.
+        INSERT statements or view SELECT lists.  Pulled from the discovery API - if table
+        does not exist on the network, returns an empty dictionary.
         """
         rtn = {}
+        success, rtn = self.user.base_api.discovery_get_columns(self.schema, self.name)
+        if success:
+            self.__cols__ = {c['column']:c for c in rtn}
+            return {c['column']:c['dataType'] for c in rtn}
+        else: return {}
 
-        # prep ddl to isolate columns 
-        ddl = str(self.create_ddl).replace('\t',' ').replace('\n',' ').strip()
-        while '  ' in ddl: ddl = ddl.replace('  ',' ')
-        first_paren = ddl.find('(')+1
-        for i in range(len(ddl), 1, -1):
-            if ddl[i:i+1] == ')': 
-                last_paren = i 
-                break
-        
-        # process columns
-        cols = [c.strip() for c in ddl[first_paren:last_paren].split(',') ]
-        for col in cols:
-            if col.lower().startswith('primary key'): continue
-            colname = col.split(' ')[0]
-            coltype = col.split(' ')[1]
-            rtn[colname] = coltype
-
-        return rtn 
+        # # prep ddl to isolate columns 
+        # ddl = str(self.create_ddl).replace('\t',' ').replace('\n',' ').strip()
+        # while '  ' in ddl: ddl = ddl.replace('  ',' ')
+        # first_paren = ddl.find('(')+1
+        # for i in range(len(ddl), 1, -1):
+        #     if ddl[i:i+1] == ')': 
+        #         last_paren = i 
+        #         break
+        # 
+        # # process columns
+        # cols = [c.strip() for c in ddl[first_paren:last_paren].split(',') ]
+        # for col in cols:
+        #     if col.lower().startswith('primary key'): continue
+        #     colname = col.split(' ')[0]
+        #     coltype = col.split(' ')[1]
+        #     rtn[colname] = coltype
+        #
+        # return rtn
 
 
     class __ins__():
         def __init__(self, resource:SXTResource) -> None:
             self.__rc__ = resource
 
-        def with_sqltext(self, sql_text:str, biscuits:list = None, user:SXTUser = None, **kwargs) -> (bool, dict):
+        def with_sqltext(self, sql_text:str, biscuits:list = None, user:SXTUser = None, **kwargs) -> tuple[bool, dict]:
             """--------------------
             Submits a single INSERT statement to the Space and Time network.
 
@@ -830,9 +854,29 @@ class SXTTable(SXTResource):
             return success, response
         
 
-        def with_list_of_dicts(self, list_of_dicts:list = [{}], biscuits:list = None, user:SXTUser = None, **kwargs) -> (bool, dict):
+        def list_of_dicts(self, list_of_dicts:list = [{}], biscuits:list = None, user:SXTUser = None, **kwargs) -> tuple[bool, dict]:
             """--------------------
-            Turns a list of dictionaries into multiple INSERT statements and submits for insertion to this resource on the Space and Time Network.
+            Turns a list of dictionaries into multiple distinct INSERT statements and submits for insertion to this resource on the Space and Time Network.
+
+            Each row (dictionary) in the list will be inserted individually, thus can contain a different assortment of columns
+            and data to insert.  This is intended for light-weight inserts of a few thousand rows.  For large-data inserts of streaming 
+            data, check out Space and Time's Kafka streaming service at  https://docs.spaceandtime.io/reference  under Kafka.
+
+            Args:
+                list_of_dicts (str): List of dictionaries, each representing a row of name/value pairs to insert.
+                biscuits (list): List of biscuits to authorize the request. Defaults to all biscuits added to the object.
+                user (SXTUser): User who will execute the request. Defaults to the default user.
+
+            Returns: 
+                bool: Success flag, True if the data was fully inserted, False if any of the records failed.
+                dict: Summary of the insert process, including an error log with any failed insert SQL and individual errors.
+            """
+            return self.with_list_of_dicts(list_of_dicts, biscuits, user, **kwargs)
+
+
+        def with_list_of_dicts(self, list_of_dicts:list = [{}], biscuits:list = None, user:SXTUser = None, **kwargs) -> tuple[bool, dict]:
+            """--------------------
+            Turns a list of dictionaries into multiple distinct INSERT statements and submits for insertion to this resource on the Space and Time Network.
 
             Each row (dictionary) in the list will be inserted individually, thus can contain a different assortment of columns
             and data to insert.  This is intended for light-weight inserts of a few thousand rows.  For large-data inserts of streaming 
@@ -880,6 +924,101 @@ class SXTTable(SXTResource):
             return err==0, {'rows': good+err, 'successes':good, 'errors':err, 'error_list':err_rtn }
 
 
+        def list_of_dicts_batch(self, list_of_dicts:list = [{}], biscuits:list = None, user:SXTUser = None, rows_per_batch:int = 500, **kwargs) -> tuple[bool, dict]:
+            """--------------------
+            Turns a list of dictionaries into batched INSERT statements containing <rows_per_batch> rows per INSERT, and submits for insertion to this resource on the Space and Time Network.
+
+            Batching multiple rows per insert requires all columns to be consistently present for all rows, and in the same order, or the 
+            insert will error.  Each batch will be filled with rows up to rows_per_batch, and the insert will be submitted as one transaction, 
+            making the operation all-or-nothing per batch. If you submit more total rows than the rows_per_batch, rows will be inserted in 
+            multiple batches, each in it's own transaction, making multiple all-or-nothing transactions. This means the final batch will 
+            typically contain fewer rows than rows_per_batch.
+
+            This method is higher performance, but less flexible than individual inserts, making it more suitable for large-scale data loads
+            with more controled inputs.  There is no hard limit to the number of rows_per_batch, however given the all-or-nothing nature of the 
+            batching, it is recommended that rows_per_batch be kept under 1000 to minimize errors.
+
+            Args:
+                list_of_dicts (str): List of dictionaries, each representing a row of name/value pairs to insert.
+                biscuits (list): List of biscuits to authorize the request. Defaults to all biscuits added to the object.
+                user (SXTUser): User who will execute the request. Defaults to the default user.
+                rows_per_batch (int): Number of rows to insert per batch. Defaults to 500.
+
+            Returns: 
+                bool: Success flag, True if the data was fully inserted, False if any of the records failed.
+                dict: Summary of the insert process, including an error log with any failed insert SQL and individual errors.
+            """
+            err_rtn = []
+            good = err = 0
+            row_count = len(list_of_dicts)
+            self.__rc__.logger.info(f'INSERT {row_count} rows into {self.__rc__.resource_name}...')
+            if len(list_of_dicts) == 0: 
+                self.__rc__.logger.warning(f'Nothing to insert, skipping')
+                return True, { 'Batches': 0, 'successes':0, 'errors':0, 'error_list':[], 'rows':0 }
+
+            # this won't work unless there's an authenticated user:
+            if user is None: user = self.__rc__.user
+            if user is None or user.access_expired: 
+                msg = 'Error: USER provided is access expired or not supplied, please login, provide a SXTUser and try again.'
+                self.__rc__.logger.error(msg)
+                return False, msg
+
+            # ----
+            # build all the insert batches first, so we don't start something we can't finish:
+
+            # change all data columns (not values) to lower case
+            list_of_dicts = [{str(n).lower():v for n,v in r.items()} for r in list_of_dicts]
+
+            # determine the columns existing in the first row of data
+            datacols = list(list_of_dicts[0].keys())
+
+            # pull the list of columns in the destination table:
+            tblcols = [str(c).lower() for c in list(self.__rc__.columns.keys())]
+
+            # get final list of columns based on the intersection of tblcols and datacols, ordered by datacols 
+            cols = [c for c in datacols if c in tblcols]
+
+            # create list of rows, formatted, with consistent col order and ready for insert
+            safecol = self.__rc__.safe_column_value
+            list_of_rows = [ "(" + ",".join([safecol(r[c]) for c in cols]) + ")" for r in list_of_dicts]
+
+            
+            # create batches
+            batches = []
+            for row in range(0, len(list_of_rows), rows_per_batch):
+                batches.append( '\n,'.join(list_of_rows[row:row+rows_per_batch]) )
+
+            # ----
+            # execute the batches 
+            sql_statements = []
+            for batch in batches:
+                sql_text = f"INSERT INTO {self.__rc__.resource_name} ({ ', '.join(cols) }) \n VALUES \n {batch}"
+                sql_statements.append(sql_text)
+                tries = 0
+                success = False
+                self.__rc__.logger.debug(f'/n{sql_text}')
+                while success == False:
+                    success, result = self.with_sqltext(sql_text=sql_text, biscuits=biscuits, user=user, log=False)
+                    if not success: 
+                        if len(result)>=1 and 'text' in result[0] and 'Duplicate key during INSERT' in result[0]['text']: break # no point in retrying this
+                        time.sleep(2)
+                    if tries >=3: break
+                    tries +=1
+
+                if success: good +=1
+                else: 
+                    err +=1
+                    self.__rc__.logger.warning(f'    Error during insert: {sql_text[:sql_text.find("(")-1]}...')
+                    err_rtn.append((result, sql_text))
+            
+                self.__rc__.logger.info(f'    {self.__rc__.resource_name} Inserted BATCH {good+err} of {math.ceil(row_count/rows_per_batch)} ({(good+err)/math.ceil(row_count/rows_per_batch):.0%}) - Successes: {good}  Erred: {err}')
+
+            self.__rc__.logger.info(f'INSERT into {self.__rc__.resource_name} complete - Total Rows: {len(list_of_dicts)} ({rows_per_batch} rows per batch), Total Batches: {good+err},  Successes: {good},  Erred: {err}')
+            if not err==0: self.__rc__.__lasterr__ = self.__rc__.SXTExceptions.SxTQueryError(err_rtn)
+            return err==0, { 'Batches': good+err, 'successes':good, 'errors':err, 'error_list':err_rtn, 'rows':len(list_of_rows), 'sql_statements':sql_statements }
+
+
+
     class __upd__():
         def __init__(self, resource:SXTResource) -> None:
             self.__rc__ = resource
@@ -912,7 +1051,7 @@ class SXTTable(SXTResource):
             return success, response
         
 
-        def with_list_of_dicts(self, pk_column:str, list_of_dicts:list = [{}], upsert:bool = False, biscuits:list = None, user:SXTUser = None, **kwargs) -> (bool, dict):
+        def with_list_of_dicts(self, pk_column:str, list_of_dicts:list = [{}], upsert:bool = False, biscuits:list = None, user:SXTUser = None, **kwargs) -> tuple[bool, dict]:
             """--------------------
             Turns a list of dictionaries into multiple UPDATE statements and submits for insertion to this resource on the Space and Time Network.
 
@@ -1000,7 +1139,7 @@ class SXTTable(SXTResource):
             return err==0, {'rows': good+err, 'successes':good, 'errors':err, 'error_list':err_rtn }
         
 
-    def delete(self, sql_text:str = None, where:str = '0=1', user:SXTUser = None, biscuits:list = None) -> (bool, dict):
+    def delete(self, sql_text:str = None, where:str = '0=1', user:SXTUser = None, biscuits:list = None) -> tuple[bool, dict]:
         """--------------------
         Deletes records from the table, with a required WHERE statement.
 
@@ -1213,85 +1352,3 @@ class SXTMaterializedView(SXTResource):
             if r6[1:5].lower() == ' as ': return False
         return False
     
-
-
-
-
-if __name__ == '__main__':
-    from pprint import pprint
-    print('\n', '-=-='*10, '\n' )
-
-    # Create a user and authenticate:
-    suzy = SXTUser('.env', authenticate=True)
-
-
-    # Create a table, using a new keypair
-    tableA = SXTTable(name='SXTTEMP.New_TableName', new_keypair=True, default_user=suzy)
-    tableA.add_biscuit('Read', tableA.PERMISSION.SELECT)
-    tableA.add_biscuit('Load', tableA.PERMISSION.SELECT, tableA.PERMISSION.INSERT, tableA.PERMISSION.UPDATE, tableA.PERMISSION.DELETE, tableA.PERMISSION.MERGE)
-    tableA.add_biscuit('Admin', tableA.PERMISSION.ALL)
-    tableA.create_ddl = """
-        CREATE TABLE {table_name} 
-        ( MyID         int
-        , MyName       varchar
-        , MyDate       date
-        , Primary Key  (MyID) 
-        )  
-    """
-    print( tableA.get_column_names() )
-
-    tableA.save()  # save to local file, to prevent lost keys
-    if not tableA.exists: 
-        success, results = tableA.create()  # Create table on Space and Time network
-    
-
-    if success:
-
-        # generate some dummy data
-        cols = ['MyID','MyName','MyDate']
-        data = [[i, chr(64+i), f'2023-09-0{i}'] for i in list(range(1,10))]
-
-        # perform insert
-        tableA.insert(columns=cols, data=data)
-        tableA.insert(sql_text= f"Insert into {tableA.table_name} values (20, 'manual test', '2023-01-01')" )
-
-        # select records back, just to verify
-        success, results = tableA.select()
-        pprint(results if success else f'Error! {results}')
-
-
-        # create a view based on the above table, with the same keys
-        viewA = SXTView(name="SXTTEMP.New_ViewName", default_user=suzy, private_key=tableA.private_key)
-        viewA.add_biscuit('Admin', viewA.PERMISSION.ALL)
-        viewA.table_biscuit = tableA.get_biscuit('Admin')
-        viewA.create_ddl = "CREATE VIEW {view_name} {with_statement} AS SELECT * from " + tableA.table_name
-        
-        success, results = viewA.create()
-        pprint(f'Success! {results}' if success else f'Error! {results}')
-
-        if success:
-            success, results = viewA.select()
-            pprint(results if success else f'Error! {results}')
-        
-        # drop the view
-        success, results = viewA.drop() 
-        pprint(f'Success! {results}' if success else f'Error! {results}')
-
-    # drop the table
-    success, results = tableA.drop()
-    print( f'success?  {success}\nData: {results}' )
-
-
-
-
-    # find the latest save file, load it, and perform a drop (in cases it was interrupted above):
-    if False: 
-        tableA = SXTTable(default_user=suzy)
-        tableA.load(filepath = './resources/table--SXTTEMP.New_TableName--v202309271907',  find_latest = True)
-        viewA = SXTView(name='SXTTEMP.New_ViewName', private_key=tableA.private_key, default_user=suzy)
-        viewA.add_biscuit('admin', viewA.PERMISSION.ALL)
-        viewA.table_biscuit = tableA.get_biscuit('admin')
-        success, result = viewA.drop()
-        success, result = tableA.drop()
-
-    pass 

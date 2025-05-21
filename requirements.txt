@@ -5,4 +5,4 @@ pandas >=2.1.3
 pyarrow >= 14.0.1
 fastparquet >= 2023.10.1
 biscuit-python >= 0.2.0
-pySteve
+pySteve = 0.0.18

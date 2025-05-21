@@ -1,10 +1,14 @@
-import logging, json
+import logging, json, sys
 from pathlib import Path
 from datetime import datetime
 from biscuit_auth import KeyPair, PrivateKey, PublicKey, Authorizer, Biscuit, BiscuitBuilder, BlockBuilder, Rule, DataLogError
-from .sxtexceptions import SxTArgumentError, SxTFileContentError, SxTBiscuitError, SxTKeyEncodingError
-from .sxtenums import SXTPermission, SXTKeyEncodings
-from .sxtkeymanager import SXTKeyManager
+
+# done fighting with this, sorry
+sxtpypath = str(Path(__file__).parent.resolve())
+if sxtpypath not in sys.path: sys.path.append(sxtpypath)
+from sxtexceptions import SxTArgumentError, SxTFileContentError, SxTBiscuitError, SxTKeyEncodingError
+from sxtenums import SXTPermission, SXTKeyEncodings
+from sxtkeymanager import SXTKeyManager
 
 
 
@@ -356,84 +360,3 @@ class SXTBiscuit():
         self.private_key = new_private_key
         return content
             
-
-
-
-
-
-if __name__ == '__main__':
-    
-    print('\n', '-=-='*10, '\n' )
-
-    # BASIC USAGE
-    bis = SXTBiscuit(name='my first biscuit', new_keypair=True)
-    bis.add_capability('schema.SomeTable',    bis.GRANT.SELECT, bis.GRANT.INSERT, bis.GRANT.UPDATE)
-    bis.add_capability('schema.AnotherTable', bis.GRANT.SELECT)
-    print( bis.biscuit_token )
-    # check out https://www.biscuitsec.org/ for external validation.
-
-     
-    # Permissions can be supplied as individual items, a list of items, or both
-    bis.clear_capabilities()
-    bis.add_capability('schema.SomeTable', bis.GRANT.SELECT, [bis.GRANT.UPDATE, bis.GRANT.INSERT, bis.GRANT.DELETE], bis.GRANT.MERGE) 
-    
-    # Permissions will also deduplicate themselves
-    bis.add_capability('schema.SomeTable', bis.GRANT.SELECT, [bis.GRANT.CREATE, bis.GRANT.INSERT, bis.GRANT.DROP], bis.GRANT.ALTER) 
-    bis.add_capability('schema.SomeTable', bis.GRANT.MERGE, bis.GRANT.DELETE, bis.GRANT.SELECT, bis.GRANT.CREATE) 
-    print( bis )
-
-    # Resources with no permissions never make it into the biscuit
-    bis.clear_capabilities()
-    bis.add_capability('schema.NoPermissions')
-    print( f'-->{bis.biscuit_text}<--' )
-    print( f'-->{bis.biscuit_token}<--' )
-
-    # You can add ALL permissions at once
-    bis.clear_capabilities()
-    bis.add_capability('schema.SomeTable', bis.GRANT.ALL, bis.GRANT.SELECT )
-    print( bis )
-
-    # To build a "wildcard" biscuit (although not recommended beyond testing)
-    bis.clear_capabilities()
-    bis.add_capability('*', bis.GRANT.ALL)
-    print( bis )
-
-    # Note, assigning ALL to permissions will remove all other permissions
-    bis.clear_capabilities()
-    bis.add_capability('*', bis.GRANT.SELECT, bis.GRANT.INSERT, bis.GRANT.DELETE)
-    bis.add_capability('*', bis.GRANT.ALL)
-    print( bis )
-
-    # ALL biscuits will also prevent assignment of other permissions - see WARNING
-    bis.add_capability('*', bis.GRANT.SELECT)
-    print( bis )
-
-
-    # Printing biscuit object as string (__str__) obscures the private key.
-    # to print the full private key, print the representation instead.
-    print( repr( bis ) )
-
-
-    # Save biscuit information to disk, so keys are not lost
-    bis.clear_capabilities()
-    bis.add_capability('schema.SomeTable', bis.GRANT.SELECT, [bis.GRANT.UPDATE, bis.GRANT.INSERT, bis.GRANT.DELETE], bis.GRANT.MERGE) 
-    save_file = './biscuits/biscuit_{resource}_{date}.json'
-    print( bis.save(save_file, overwrite = True) )
-
-    # load new biscuit object from saved json 
-    bis2 = SXTBiscuit(logger=bis.logger, from_file = './biscuits/biscuit_schema.SomeTable_{date}.json')
-    print( bis2 )
-
-    # or 
-    bis3 = SXTBiscuit(logger=bis.logger)
-    bis3.load( './biscuits/biscuit_{resource}_{date}.json', resource='schema.SomeTable' )
-    print( bis3 )
-
-    # Practically speaking, you'll want to guard against losing keys.
-    # Using the default filename will help.
-    bis3.save(resource='schema.SomeTable')
-
-
-    # Return a json object with information
-    print( bis.to_json() )
-    pass

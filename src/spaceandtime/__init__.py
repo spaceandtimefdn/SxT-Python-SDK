@@ -6,5 +6,3 @@ from .sxtresource import SXTResource, SXTTable, SXTView, SXTMaterializedView
 from .sxtuser import SXTUser
 from .sxtenums import *
 from .sxtexceptions import *
-
- 
