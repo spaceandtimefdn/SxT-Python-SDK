@@ -1395,5 +1395,4 @@ class SXTMaterializedView(SXTResource):
             if r6[1:5].lower() == 'with' and not r6[0:1].isalnum() and not r6[5:6].isalnum(): return True
             if r6[1:5].lower() == ' as ': return False
         return False
-    
 
