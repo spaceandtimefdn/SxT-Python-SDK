@@ -1,5 +1,4 @@
 import logging, json, math, time, os, sys
-from pysteve import pySteve
 from pathlib import Path
 from datetime import datetime
 
@@ -537,7 +536,7 @@ class SXTResource():
         raise self.__lasterr__
     
 
-    def load(self, filepath:Path, exact_match_only:bool = True, docstring_marker_override:str = None):
+    def load(self, filepath:Path, *args, **kwargs):
         """--------------------
         Loads Resource file *WITH PRIVATE KEYS* to the current object, overwriting all current values.
 
@@ -554,14 +553,59 @@ class SXTResource():
         Returns: 
             bool: True if load was successful, False if not. 
         """
-        if not filepath: raise ValueError(f'Must supply a filepath to load().')
-        self.clear_all()        
-        
+        if not filepath or not Path(filepath).exists(): raise ValueError(f'Must supply a valid filepath to load().')
+        self.clear_all()   
+
+        # load file contents:
+        filecontents = Path(filepath).read_text()
+
         # just in case, try to catch other past docstring markers
-        for trymarkers in [docstring_marker_override, 'EOM', 'EOMsg', None, docstring_marker_override]:
-            loadmap = pySteve.envfile_load(load_path=Path(filepath).resolve(), exact_match_only=exact_match_only, docstring_marker_override=trymarkers)
-            missed_docstrmarkers = [v for n,v in loadmap.items() if str(v).strip().startswith('$(cat <<') and len(v)<=32]
-            if missed_docstrmarkers==[]: break 
+        eom_marker = kwargs['docstring_marker_override'] if 'docstring_marker_override' in kwargs else 'EOM'
+        if eom_marker not in filecontents and 'EOMsg' in filecontents: eom_marker = 'EOMsg'
+        
+        # pull out any docstrings first:
+        multiline = False
+        multilines = []
+        lines = filecontents.split("\n")
+        loadmap = {}
+
+        for line in lines:
+            line_nospace = line = str(line).strip()
+            if line.startswith('#') or line.strip() == '': continue
+
+            while ' ' in line_nospace: line_nospace = line_nospace.replace(' ','')
+
+            if f'$(cat<<{eom_marker}' in line_nospace and '"' not in line_nospace and "'" not in line_nospace:
+                # trigger multiline section (docstring) and capture multiline name
+                multiline = True
+                name = line.split('=')[0].strip()
+                multilines = []
+                continue
+
+            if multiline and not line_nospace.startswith(eom_marker):
+                # continue collecting multiline value data (not name)
+                multilines.append(line)
+                continue
+
+            if multiline and line_nospace.startswith(eom_marker):
+                # trigger end of multiline section, and save to larger loadmap    
+                multiline = False
+                loadmap[name] = '\n'.join(multilines)
+                continue
+                
+            # if missing an equal sign, not an assignment line, ignore
+            if '=' not in line: continue
+
+            # at this point, the only option left is simple name=value
+            # strip off any extra quotes / strings, and add to loadmap
+            name = line.split('=', 1)[0].strip()
+            value = line.split('=', 1)[1].strip().split('#')[0].strip()
+            if value.startswith("'") and value.endswith("'"): value = value[1:-1]
+            if value.startswith('"') and value.endswith('"'): value = value[1:-1]
+            loadmap[name] = value
+            continue
+             
+
         loadmap = {k.lower():loadmap[k] for k in sorted(list(loadmap.keys()))} # sorted to prevent create_ddl / _template overwriting)
 
         try:    
@@ -1352,3 +1396,4 @@ class SXTMaterializedView(SXTResource):
             if r6[1:5].lower() == ' as ': return False
         return False
     
+

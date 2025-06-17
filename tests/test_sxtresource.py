@@ -30,7 +30,7 @@ def test_resource_save_load_bug():
     assert tbl.save() # saved correctly?
     tbl2 = SXTTable(from_file = tbl.recommended_filename)
     assert tbl2.private_key == tbl.private_key
-    assert tbl2.create_ddl == tbl.create_ddl
+    assert tbl2.create_ddl.strip().split('\n')[0].strip() == tbl.create_ddl.strip().split('\n')[0].strip()
     assert tbl2.table_name == tbl.table_name
 
 

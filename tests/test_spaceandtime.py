@@ -268,7 +268,7 @@ def test_discovery():
     assert success
     assert type(schemas) == list 
     assert 'ETHEREUM' in schemas
-    assert 'SXTDEMO' in schemas
+    assert 'POLYGON' in schemas # SXTDemo currently removed
     assert 'SXTLABS' in schemas
 
     success, schemas = sxt.discovery_get_schemas(return_as=dict)
