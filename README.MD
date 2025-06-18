@@ -132,7 +132,7 @@ tableA = SXTTable(name = "SXTTEMP.MyTestTable",
 				new_keypair = True, 
 				default_user = sxt.user,
 				logger = sxt.logger,
-				access_type = SXTTableAccessType.PERMISSSIONED)
+				access_type = SXTTableAccessType.PERMISSIONED)
 
 tableA.create_ddl = """
 	CREATE TABLE {table_name} 
